@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Etwow</string>
+
+    <string name="notification_channel_name">Connexion trottinette</string>
+    <string name="notification_title">Etwow</string>
+    <string name="notification_connecting">Recherche de la trottinette…</string>
+    <string name="notification_connected">Trottinette connectée</string>
+    <string name="notification_disconnected">Trottinette hors ligne</string>
+
+    <string name="widget_title">Etwow</string>
+    <string name="widget_offline">Hors ligne</string>
+    <string name="widget_connecting">Connexion…</string>
+    <string name="widget_hint_25">Toucher : passer à 25 km/h</string>
+    <string name="widget_hint_restore">Toucher : rétablir la limite</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="etwow_background">#0E1116</color>
+    <color name="etwow_surface">#161B22</color>
+    <color name="etwow_primary">#7CD4FD</color>
+    <color name="etwow_on_primary">#00344A</color>
+    <color name="etwow_secondary">#9BE38B</color>
+    <color name="etwow_outline">#2B3440</color>
+</resources>
