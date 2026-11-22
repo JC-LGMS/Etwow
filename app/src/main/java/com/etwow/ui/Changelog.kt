@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.15",
+        date = "23/11/2026 00:07",
+        items = listOf(
+            "Barre de défilement : elle part du haut de la zone et suit vraiment le texte (elle flottait au milieu).",
+            "Toute la colonne de la barre est saisissable, pas seulement le pouce.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.14",
         date = "22/11/2026 23:55",
         items = listOf(

@@ -637,7 +637,7 @@ private fun ScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
         )
         Box(
             Modifier
-                .align(Alignment.CenterEnd)
+                .align(Alignment.TopEnd)
                 .offset { IntOffset(0, offset.toInt()) }
                 .fillMaxWidth()
                 .height(with(density) { thumb.toDp() }),
@@ -656,7 +656,8 @@ private fun ScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
     }
 }
 
-private fun copyLogs(context: Context, logs: List<String>) {    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+private fun copyLogs(context: Context, logs: List<String>) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("Etwow", logs.joinToString("\n")))
 }
 

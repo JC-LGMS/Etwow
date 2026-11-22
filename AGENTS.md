@@ -278,6 +278,8 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   desktop). `ScrollIndicator` dans `MainScreen.kt` calcule la barre à partir de
   `ScrollState.value` / `maxValue` et de la hauteur de la vue ; la colonne de 16 dp est saisissable
   et se glisse avec `draggable` → `ScrollState.dispatchRawDelta` (pas de coroutine nécessaire).
+  Piège : `Alignment.CenterEnd` centre **aussi verticalement** — pour un élément décalé, c'est
+  `Alignment.TopEnd` (la 0.14 avait un pouce qui flottait au milieu de la zone).
 
 ### Connexion automatique
 
