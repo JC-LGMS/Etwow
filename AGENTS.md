@@ -233,6 +233,19 @@ trame réelle.
   `android:foregroundServiceType="connectedDevice"`.
 - `uses-feature android:name="android.hardware.bluetooth_le" android:required="false"` pour que
   l'émulateur puisse installer l'APK ; l'app affiche « Bluetooth indisponible » ou le simulateur.
+- **Piège vérifié sur un vrai téléphone (22/11/2026, crash au lancement)** : sur targetSdk 34+,
+  `startForeground(..., CONNECTED_DEVICE)` exige la permission normale
+  `FOREGROUND_SERVICE_CONNECTED_DEVICE` **et au moins une** permission d'exécution parmi
+  `BLUETOOTH_CONNECT/SCAN/ADVERTISE`… (`SecurityException` sinon, et le processus meurt).
+  Démarrer le service juste après `requestPermissions` (accord asynchrone) plante donc à la
+  première ouverture. La correction, à conserver :
+  1. `MainActivity` ne démarre le service que si `BLUETOOTH_SCAN` **et** `BLUETOOTH_CONNECT` sont
+     déjà accordées, et le démarre dans `onRequestPermissionsResult` après acceptation ;
+  2. `BootReceiver` vérifie `BLUETOOTH_CONNECT` avant de démarrer ;
+  3. `ScooterService.onCreate` entoure `startForeground` d'un `try/catch (SecurityException)` et
+     `stopSelf()` : aucun chemin (widget, réglages, redémarrage) ne doit tuer le processus.
+  Reproduction sur l'émulateur : `adb shell pm clear com.etwow` puis lancer l'app — sans
+  autorisation accordée, l'ancien code plantait avec la même trace.
 - Vérifier les restrictions de démarrage de service de premier plan en arrière-plan (Android 12+)
   et les exigences exactes de l'API 37 avant de conclure.
 

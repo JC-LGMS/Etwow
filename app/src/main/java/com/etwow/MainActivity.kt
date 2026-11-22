@@ -16,14 +16,26 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestMissingPermissions()
-        if (Settings(this).autoConnect) ScooterService.start(this)
         setContent {
             EtwowTheme {
                 MainScreen()
             }
         }
+        // Le service est un FGS connectedDevice : le démarrer avant l'accord de BLUETOOTH_*
+        // fait planter le processus (SecurityException sur targetSdk 34+).
+        if (hasBluetoothPermission()) startIfAutoConnect() else requestMissingPermissions()
     }
+
+    private fun startIfAutoConnect() {
+        if (Settings(this).autoConnect) ScooterService.start(this)
+    }
+
+    private fun hasBluetoothPermission(): Boolean =
+        Build.VERSION.SDK_INT < 31 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) ==
+            PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun requestMissingPermissions() {
         val needed = buildList {
@@ -46,6 +58,6 @@ class MainActivity : ComponentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1) ScooterService.send(this, ScooterService.ACTION_RECONNECT)
+        if (requestCode == 1 && hasBluetoothPermission()) startIfAutoConnect()
     }
 }

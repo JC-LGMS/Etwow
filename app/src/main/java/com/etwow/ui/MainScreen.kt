@@ -1,8 +1,11 @@
 package com.etwow.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -50,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.etwow.BuildConfig
 import com.etwow.R
 import com.etwow.data.Connection
@@ -120,6 +124,14 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 OutlinedButton(onClick = { ScooterService.send(context, ScooterService.ACTION_STOP) }) {
                     Text("Déconnecter")
                 }
+            }
+            if (!bluetoothAllowed(context)) {
+                Text(
+                    "Autorisation Bluetooth manquante : accorde-la dans les réglages du téléphone " +
+                        "pour lancer la connexion.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
             }
         }
 
@@ -467,3 +479,9 @@ private fun copyLogs(context: Context, logs: List<String>) {
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("Etwow", logs.joinToString("\n")))
 }
+
+/** Avant Android 12, le Bluetooth ne demande aucune permission d'exécution. */
+private fun bluetoothAllowed(context: Context): Boolean =
+    Build.VERSION.SDK_INT < 31 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+        PackageManager.PERMISSION_GRANTED

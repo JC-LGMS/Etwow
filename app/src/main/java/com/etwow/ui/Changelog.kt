@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.3",
+        date = "22/11/2026 01:26",
+        items = listOf(
+            "Corrige le plantage au lancement tant que l'autorisation Bluetooth n'est pas accordée.",
+            "La liaison affiche un message clair quand l'autorisation manque.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.2",
         date = "22/11/2026 01:07",
         items = listOf(

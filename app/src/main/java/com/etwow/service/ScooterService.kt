@@ -80,6 +80,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
     private var pendingJob: Job? = null
     private var notificationKey = ""
     private var widgetKey = ""
+    private var foregroundBlocked = false
 
     // Override manuel du phare : suspendu jusqu'à la prochaine transition calculée.
     private var lightOverride = false
@@ -91,7 +92,13 @@ class ScooterService : Service(), ScooterTransport.Listener {
         super.onCreate()
         settings = Settings(this)
         createChannel()
-        startForegroundNotification()
+        if (!startForegroundNotification()) {
+            // Sans BLUETOOTH_CONNECT/SCAN accordé, un FGS connectedDevice tue le processus :
+            // on s'arrête proprement et l'UI invite à autoriser.
+            foregroundBlocked = true
+            stopSelf()
+            return
+        }
         ScooterBus.update {
             it.copy(simulator = settings.simulator, autoLight = settings.autoLight)
         }
@@ -104,6 +111,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (foregroundBlocked) return START_NOT_STICKY
         when (intent?.action) {
             ACTION_STOP -> {
                 stopTransport()
@@ -379,9 +387,16 @@ class ScooterService : Service(), ScooterTransport.Listener {
             .build()
     }
 
-    private fun startForegroundNotification() {
+    /** false si le système refuse le type connectedDevice faute d'autorisation Bluetooth. */
+    private fun startForegroundNotification(): Boolean {
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
+        return try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
+            true
+        } catch (e: SecurityException) {
+            ScooterBus.log("service arrêté : autorisation Bluetooth manquante")
+            false
+        }
     }
 
     private fun render() {
