@@ -220,7 +220,8 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
             }
 
             if (state.newProtocol) {
-                Text("Mode de conduite : ${DRIVE_MODES[state.driveMode ?: -1] ?: "—"}")
+                val driveLabel = state.driveMode?.let { DRIVE_MODES.getOrNull(it) } ?: "—"
+                Text("Mode de conduite : $driveLabel")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DRIVE_MODES.forEachIndexed { index, label ->
                         val selected = state.driveMode == index

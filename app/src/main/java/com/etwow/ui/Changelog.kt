@@ -12,6 +12,13 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.10",
+        date = "22/11/2026 23:15",
+        items = listOf(
+            "Corrige le plantage quand le mode de conduite n'est pas encore connu (index -1 dans la liste des modes).",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.9",
         date = "22/11/2026 23:10",
         items = listOf(

@@ -272,6 +272,8 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 - `ui/` : `MainScreen.kt` porte trois écrans dans le même composable (`Page.Main`,
   `Page.Settings`, `Page.Info`) — pas de bibliothèque de navigation : un `remember` + une ligne
   « ← Retour » + `BackHandler`. `widget/` : `RemoteViews`.
+  Attention : un état optionnel (`driveMode`, etc.) ne doit jamais servir d'index de liste —
+  `LISTE[etat ?: -1]` a planté en 0.9 ; utiliser `getOrNull`.
 
 ### Connexion automatique
 
