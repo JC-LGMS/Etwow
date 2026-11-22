@@ -108,7 +108,7 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
     )
 
     private fun emit(bytes: ByteArray) {
-        listener.onLog("sim ← ${bytes.hex()}")
+        // Le journal brut est écrit une seule fois, par ScooterService.
         listener.onNotification(bytes)
     }
 }

@@ -157,6 +157,12 @@ d'indexer : une trame tronquée ne doit jamais planter le service.
 | 4 | `[4, hi, lo]` | trip ; le code public fait `hi + lo`, **faux au-delà de 255** |
 | 5 | `[5, ?, ?, b2, b1, b0]` | odomètre ; le code public additionne `b2+b1+b0`, **faux au-delà de 255** |
 
+**À ce jour (22/11/2026) la vitesse est juste sur la machine réelle ; batterie, trip et odomètre
+ne correspondent pas à l'afficheur.** L'unité et l'ordre des octets restent donc à déterminer :
+ouvrir *Informations techniques*, relever les lignes « Trame batterie / trip / odo » et les
+comparer aux valeurs affichées par la trottinette, puis corriger `EtwowProtocol.decode` et figer
+un test avec la trame réelle. Ne pas ajuster au hasard.
+
 Statut (octet 1 du type 3) : quartet haut = `0x4 | phare(0x1) | verrou(0x2) | zeroStart(0x8)`,
 quartet bas = mode de limite (0..3). Exemples : `0x5` = phare seul, `0x6` = verrou seul,
 `0xF` = phare + verrou + zero start.

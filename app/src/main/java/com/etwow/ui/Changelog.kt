@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.4",
+        date = "22/11/2026 01:38",
+        items = listOf(
+            "Notification du service réduite au minimum : plus d'icône ni de texte de recherche dans la barre d'état.",
+            "Trames reçues journalisées aussi sur la vraie trottinette, avec la dernière trame batterie/trip/odo dans les informations techniques.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.3",
         date = "22/11/2026 01:26",
         items = listOf(

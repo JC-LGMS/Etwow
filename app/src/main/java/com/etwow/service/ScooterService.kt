@@ -50,7 +50,7 @@ import java.time.format.DateTimeFormatter
 class ScooterService : Service(), ScooterTransport.Listener {
 
     companion object {
-        private const val CHANNEL_ID = "scooter"
+        private const val CHANNEL_ID = "scooter_v2"
         private const val NOTIFICATION_ID = 1
 
         const val ACTION_START = "com.etwow.action.START"
@@ -190,10 +190,13 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onNotification(bytes: ByteArray) {
-        val telemetry = EtwowProtocol.decode(bytes) ?: run {
+        val telemetry = EtwowProtocol.decode(bytes)
+        if (telemetry == null) {
             ScooterBus.log("← ${bytes.hex()} (ignorée)")
             return
         }
+        // Journal brut : c'est la seule façon de corriger un décodage faux sur la vraie machine.
+        ScooterBus.log("← ${bytes.hex()}")
         ScooterBus.update { snap ->
             snap.copy(
                 speedKmh = telemetry.speedKmh ?: snap.speedKmh,
@@ -351,10 +354,13 @@ class ScooterService : Service(), ScooterTransport.Listener {
 
     private fun createChannel() {
         val manager = getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel("scooter")
+        // IMPORTANCE_MIN : pas d'icône dans la barre d'état, pas de son ; la notification du
+        // service reste dans le volet (obligatoire), mais elle ne dérange plus.
         val channel = NotificationChannel(
             CHANNEL_ID,
             getString(R.string.notification_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
+            NotificationManager.IMPORTANCE_MIN,
         )
         manager.createNotificationChannel(channel)
     }
