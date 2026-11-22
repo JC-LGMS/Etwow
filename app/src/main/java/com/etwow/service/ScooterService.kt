@@ -201,7 +201,6 @@ class ScooterService : Service(), ScooterTransport.Listener {
             snap.copy(
                 speedKmh = telemetry.speedKmh ?: snap.speedKmh,
                 batteryPercent = telemetry.batteryPercent ?: snap.batteryPercent,
-                tripKm = telemetry.tripKm ?: snap.tripKm,
                 odoKm = telemetry.odoKm ?: snap.odoKm,
                 statusByte = telemetry.status ?: snap.statusByte,
                 locked = telemetry.locked ?: snap.locked,

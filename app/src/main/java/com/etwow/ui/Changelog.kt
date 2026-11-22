@@ -12,6 +12,15 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.6",
+        date = "22/11/2026 19:35",
+        items = listOf(
+            "Décodage calé sur le parseur de l'application officielle : valeur 16 bits petit-boutiste, vitesse /10, distance /10.",
+            "L'odomètre correspond enfin à l'afficheur (931,9 km sur la machine de test) ; le trip n'est pas transmis par ce modèle.",
+            "Statut : phare 0x10, verrou 0x20, zero start 0x80, cran de limite sur les 3 bits de poids faible.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.5",
         date = "22/11/2026 19:12",
         items = listOf(

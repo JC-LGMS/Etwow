@@ -27,56 +27,53 @@ class EtwowProtocolTest {
         assertEquals("55 FF 05 FF 58", EtwowProtocol.frame(intArrayOf(0xFF, 0x05, 0xFF)).hex())
     }
 
-    /** Trames relevées sur une GTS réelle le 22/11/2026. */
+    /** Trames relevées sur une GTS réelle le 22/11/2026, comparées à son afficheur. */
     @Test
     fun `trames reelles de la GTS`() {
+        assertEquals(0.0, EtwowProtocol.decode(bytes(1, 0x00, 0x00, 0x01))!!.speedKmh!!, 0.0001)
+        assertEquals(100, EtwowProtocol.decode(bytes(2, 0x64, 0x00, 0x66))!!.batteryPercent)
+
         val status = EtwowProtocol.decode(bytes(3, 0x10, 0x00, 0x13))!!
         assertEquals(true, status.lightOn)
         assertEquals(false, status.locked)
         assertEquals(SpeedModes.L0_42, status.mode)
 
-        assertEquals(100, EtwowProtocol.decode(bytes(2, 0x64, 0x00, 0x66))!!.batteryPercent)
-        assertEquals(0, EtwowProtocol.decode(bytes(1, 0x00, 0x00, 0x01))!!.speedKmh)
+        // 0x2467 / 10 = 931,9 km : l'odomètre affiché par la trottinette (931).
+        assertEquals(931.9, EtwowProtocol.decode(bytes(4, 0x67, 0x24, 0x8F))!!.odoKm!!, 0.0001)
 
-        val trip = EtwowProtocol.decode(bytes(4, 0x67, 0x24, 0x8F))!!.tripKm!!
-        assertEquals(26.404, trip, 0.0001)
-
-        // Type 5 : la somme de contrôle annoncée ne tombe pas juste, tout le corps est gardé.
-        assertEquals(1234, EtwowProtocol.decode(bytes(5, 0x31, 0x32, 0x33, 0x34, 0x9D))!!.odoKm)
+        // Type 5 (6 octets) absent du parseur officiel : ignoré.
+        assertNull(EtwowProtocol.decode(bytes(5, 0x31, 0x32, 0x33, 0x34, 0x9D)))
     }
 
     @Test
-    fun `notification de vitesse`() {
-        val telemetry = EtwowProtocol.decode(bytes(1, 17, 0))
-        assertEquals(17, telemetry?.speedKmh)
-        assertEquals(17 + 255, EtwowProtocol.decode(bytes(1, 17, 1))?.speedKmh)
+    fun `valeurs petit-boutistes`() {
+        // 0x00FD = 253 -> 25,3 km/h
+        assertEquals(25.3, EtwowProtocol.decode(bytes(1, 0xFD, 0x00, 0xFE))!!.speedKmh!!, 0.0001)
+        // 0x0064 = 100 %
+        assertEquals(100, EtwowProtocol.decode(bytes(2, 0x64, 0x00, 0x66))!!.batteryPercent)
     }
 
     @Test
     fun `batterie hors bornes ignoree`() {
-        assertEquals(64, EtwowProtocol.decode(bytes(2, 64))?.batteryPercent)
-        assertNull(EtwowProtocol.decode(bytes(2, 200)))
+        assertNull(EtwowProtocol.decode(bytes(2, 200, 0)))
+        assertNull(EtwowProtocol.decode(bytes(2, 0xC8, 0x00)))
     }
 
     @Test
     fun `statut verrou phare et mode`() {
-        val telemetry = EtwowProtocol.decode(bytes(3, 0x73))
+        // 0x73 = zero start non, verrou oui, phare oui, cran 3.
+        val telemetry = EtwowProtocol.decode(bytes(3, 0x73, 0x00))
         assertEquals(true, telemetry?.locked)
         assertEquals(true, telemetry?.lightOn)
         assertEquals(false, telemetry?.zeroStart)
         assertEquals(SpeedModes.L3_25, telemetry?.mode)
 
-        val lockedOnly = EtwowProtocol.decode(bytes(3, 0x62))
+        val lockedOnly = EtwowProtocol.decode(bytes(3, 0x22, 0x00))
         assertEquals(true, lockedOnly?.locked)
         assertEquals(false, lockedOnly?.lightOn)
         assertEquals(SpeedModes.L2_20, lockedOnly?.mode)
-    }
 
-    @Test
-    fun `trip en metres et odometre en chiffres`() {
-        // 0x012C = 300 m = 0,3 km
-        assertEquals(0.3, EtwowProtocol.decode(bytes(4, 0x01, 0x2C))?.tripKm!!, 0.0001)
-        assertEquals(70_000, EtwowProtocol.decode(bytes(5, 0, 0, 0x01, 0x11, 0x70))?.odoKm)
+        assertEquals(true, EtwowProtocol.decode(bytes(3, 0x80, 0x00))?.zeroStart)
     }
 
     @Test
@@ -84,8 +81,7 @@ class EtwowProtocolTest {
         assertNull(EtwowProtocol.decode(ByteArray(0)))
         assertNull(EtwowProtocol.decode(bytes(1)))
         assertNull(EtwowProtocol.decode(bytes(4, 0x01)))
-        assertNull(EtwowProtocol.decode(bytes(5, 0, 0, 1)))
-        assertNull(EtwowProtocol.decode(bytes(9, 0, 0, 0, 0, 0)))
+        assertNull(EtwowProtocol.decode(bytes(9, 0, 0, 0)))
     }
 
     @Test

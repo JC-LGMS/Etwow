@@ -95,7 +95,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
     val settings = remember { Settings(context) }
     var autoLight by remember { mutableStateOf(settings.autoLight) }
     val connected = state.connection == Connection.Connected
-    val canLock = connected && state.speedKmh == 0
+    val canLock = connected && state.speedKmh == 0.0
 
     Screen {
         Header(version = "v${BuildConfig.VERSION_NAME}", onVersion = onVersion)
@@ -142,7 +142,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
             ) {
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
                     Text(
-                        state.speedKmh?.toString() ?: "—",
+                        state.speedKmh?.let { "%.0f".format(it) } ?: "—",
                         fontSize = 56.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
@@ -156,7 +156,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 ) {
                     Metric("Batterie", state.batteryPercent?.let { "$it %" } ?: "—")
                     Metric("Depuis l'allumage", state.tripKm?.let { "%.1f km".format(it) } ?: "—")
-                    Metric("Odomètre", state.odoKm?.let { "$it km" } ?: "—")
+                    Metric("Odomètre", state.odoKm?.let { "%.1f km".format(it) } ?: "—")
                 }
             }
         }
@@ -188,7 +188,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     )
                 }
             }
-            if (connected && state.speedKmh != 0) {
+            if (connected && state.speedKmh != 0.0) {
                 Text(
                     "Verrouillage impossible en roulant.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -288,8 +288,8 @@ private fun InfoPage(onBack: () -> Unit) {
             InfoLine("Adresse", state.deviceAddress ?: "—")
             // Permet de comparer avec l'afficheur de la trottinette quand un décodage est faux.
             InfoLine("Trame batterie", lastFrame(state.logs, 2))
-            InfoLine("Trame trip", lastFrame(state.logs, 4))
-            InfoLine("Trame odo", lastFrame(state.logs, 5))
+            InfoLine("Trame distance", lastFrame(state.logs, 4))
+            InfoLine("Trame type 5", lastFrame(state.logs, 5))
         }
         CardBox {
             Row(

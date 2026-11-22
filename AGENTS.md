@@ -146,48 +146,34 @@ d'envoyer quoi que ce soit. Écrire **avec réponse** sur Android.
 
 ### Notifications
 
-Le premier octet est le type ; les suivants dépendent du type. Vérifier la longueur **avant**
-d'indexer : une trame tronquée ne doit jamais planter le service.
+Le premier octet est le type ; vérifier la longueur **avant** d'indexer : une trame tronquée ne doit
+jamais planter le service.
 
-| Type | Octets | Interprétation publique |
+Règles reprises du **parseur de l'application officielle** décompilée, documenté dans
+`Laufbursche42/etwow-unlock` (`app.js`, en-tête et section « RX telemetry parser ») : trames de
+4 octets, `byte[0]` = type, **valeur int16 petit-boutiste sur les octets 1 et 2**, `byte[3]` =
+somme de contrôle (somme des octets précédents).
+
+| Type | Trame réelle (GTS) | Règle |
 |---|---|---|
-| 1 | `[1, lo, flag]` | vitesse = `lo + (flag == 1 ? 255 : 0)` (formule à confirmer) |
-| 2 | `[2, pct]` | batterie en % |
-| 3 | `[3, status]` | octet de statut, voir ci-dessous |
-| 4 | `[4, hi, lo]` | trip ; le code public fait `hi + lo`, **faux au-delà de 255** |
-| 5 | `[5, ?, ?, b2, b1, b0]` | odomètre ; le code public additionne `b2+b1+b0`, **faux au-delà de 255** |
+| 1 | `01 00 00 01` | vitesse = int16LE / 10 → 0,0 km/h |
+| 2 | `02 64 00 66` | batterie = int16LE brut → 100 % |
+| 3 | `03 10 00 13` | `0x80` zero start, `0x20` verrou, `0x10` phare, `& 0x07` cran de limite |
+| 4 | `04 67 24 8F` | distance = int16LE / 10 → 0x2467/10 = **931,9 km** (odomètre affiché : 931) |
+| 5 | `05 31 32 33 34 9D` | **absent du parseur officiel** (6 octets, « 1234 ») : ignoré |
 
-### Notifications (relevées sur une GTS le 22/11/2026)
+Conséquences vérifiées sur la machine de test (22/11/2026) :
+- le **type 4 est l'odomètre**, pas le trip : sa valeur colle à l'afficheur ;
+- le **trip n'est pas transmis** par ce modèle — l'application affiche « — » ;
+- l'ancienne formule de vitesse `lo + (flag ? 255 : 0)` était fausse au-delà de 25,5 km/h.
 
-Chaque notification se termine par une **somme de contrôle** : somme des octets précédents,
-tronquée à 8 bits. Vérifié : `01 00 00 | 01`, `02 64 00 | 66`, `03 10 00 | 13`, `04 67 24 | 8F`.
-Le type 5 de cette machine ne la respecte pas (`05 31 32 33 34 | 9D` : la somme vaudrait `CF`) :
-le codec ne retire le dernier octet que si la somme tombe juste, sinon tout reste donnée.
+Le projet `simonrey1/etwowconnect2` lit les octets un par un (`hi + lo`, `b2+b1+b0`, etc.) : ses
+formules sont fausses au-delà de 255 et ne doivent pas servir de référence. Seul le jeu de commandes
+`55 <cmd> 05 <arg> <somme>` de ce projet est juste.
 
-| Type | Trame réelle | Interprétation retenue |
-|---|---|---|
-| 1 | `01 00 00 01` | vitesse = premier octet (+255 si le suivant vaut 1) |
-| 2 | `02 64 00 66` | batterie en % = premier octet (0x64 = 100) |
-| 3 | `03 10 00 13` | statut : quartet haut = phare 0x1 / verrou 0x2 / zero start 0x8, quartet bas = mode |
-| 4 | `04 67 24 8F` | trip en **mètres** sur 16 bits grand-boutiste (0x6724 = 26,4 km) |
-| 5 | `05 31 32 33 34 9D` | odomètre en **chiffres décimaux** (0x31..0x34 = « 1234 » km) |
-
-Le bit 0x40 du quartet haut n'apparaît pas sur cette machine (statut `0x00` au repos, `0x10` phare
-allumé) : ne pas s'en servir comme marqueur. Le type 5 est le seul dont la somme de contrôle est
-fausse ; le décodage accepte donc les deux formes.
-
-**Reste à confirmer sur la machine** : que l'afficheur de la trottinette montre bien 100 %, 26,4 km
-et 1234 km pour ces trames (les unités mètres/chiffres sont déduites, pas encore validées à l'œil).
-
-Statut (octet 1 du type 3) : quartet haut = `0x4 | phare(0x1) | verrou(0x2) | zeroStart(0x8)`,
-quartet bas = mode de limite (0..3). Exemples : `0x5` = phare seul, `0x6` = verrou seul,
-`0xF` = phare + verrou + zero start.
-
-**Hypothèse à vérifier** : trip et odomètre sont probablement en **grand-boutiste** (`(hi << 8) +
-lo`, `(b2 << 16) + (b1 << 8) + b0`). Le code public additionne sans décalage, ce qui ne peut pas
-dépasser 255 ; le simulateur du projet place les petites valeurs dans l'octet de poids faible, ce
-qui va dans ce sens. Comparer avec l'afficheur de la trottinette, puis figer un test avec une
-trame réelle.
+Statut (octet 1 du type 3), bits vérifiés sur la machine : `0x80` zero start, `0x20` verrou,
+`0x10` phare, bits de poids faible = cran de limite (0 = 42, 1 = 6, 2 = 20, 3 = 25).
+Exemples observés : `0x00` = tout éteint, cran 0 ; `0x10` = phare seul.
 
 ### Pièges de protocole
 

@@ -25,8 +25,7 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
     private var light = false
     private var mode = SpeedModes.L2_20
     private var battery = 82
-    private var tripMeters = 12_500
-    private var odo = 1240
+    private var odoTenths = 12_400
     private var speed = 0
 
     override fun start() {
@@ -38,7 +37,6 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
             emit(statusFrame())
             emit(batteryFrame())
             emit(speedFrame())
-            emit(tripFrame())
             emit(odoFrame())
 
             var tick = 0
@@ -52,14 +50,10 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
                     phase < 20 -> 0
                     else -> ((phase - 19) * 3).coerceAtMost(25)
                 }
-                if (tick % 5 == 0) tripMeters += 10
-                if (tick % 150 == 0) odo += 1
+                if (tick % 15 == 0) odoTenths += 1
                 if (tick % 30 == 0 && battery > 0) battery -= 1
                 emit(speedFrame())
-                if (tick % 5 == 0) {
-                    emit(tripFrame())
-                    emit(odoFrame())
-                }
+                if (tick % 5 == 0) emit(odoFrame())
                 if (tick % 30 == 0) emit(batteryFrame())
             }
         }
@@ -104,14 +98,14 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
 
     private fun batteryFrame(): ByteArray = notify(2, battery, 0)
 
-    private fun speedFrame(): ByteArray = notify(1, speed and 0xFF, 0)
-
-    private fun tripFrame(): ByteArray = notify(4, (tripMeters shr 8) and 0xFF, tripMeters and 0xFF)
-
-    private fun odoFrame(): ByteArray {
-        val digits = "%04d".format(odo % 10_000)
-        return notify(5, digits[0].code, digits[1].code, digits[2].code, digits[3].code)
+    /** Vitesse en dixièmes de km/h, petit-boutiste, comme la machine. */
+    private fun speedFrame(): ByteArray {
+        val tenths = speed * 10
+        return notify(1, tenths and 0xFF, (tenths shr 8) and 0xFF)
     }
+
+    /** Distance en dixièmes de km, petit-boutiste. */
+    private fun odoFrame(): ByteArray = notify(4, odoTenths and 0xFF, (odoTenths shr 8) and 0xFF)
 
     private fun emit(bytes: ByteArray) {
         // Le journal brut est écrit une seule fois, par ScooterService.

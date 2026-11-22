@@ -10,7 +10,8 @@ connus.
 
 - **Connexion automatique** en Bluetooth Low Energy dès que la trottinette s'allume, via un
   service de premier plan (scan filtré par nom/service, reconnexion avec temporisation).
-- **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (trip), odomètre total.
+- **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (si le firmware l'envoie),
+  odomètre total.
 - **Commandes** : verrouillage/déverrouillage (uniquement à l'arrêt), phare, choix de la limite de
   vitesse (6, 20, 25 ou 42 km/h selon le modèle).
 - **Widget** : 1×1, logo et coche verte quand la limite est à **25 km/h** (rouge sinon) ; un appui
