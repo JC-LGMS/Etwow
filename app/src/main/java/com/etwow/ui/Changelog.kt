@@ -12,6 +12,13 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.12",
+        date = "22/11/2026 23:36",
+        items = listOf(
+            "Tableau de bord : les trois valeurs et les trois libellés sont réellement en colonnes.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.11",
         date = "22/11/2026 23:26",
         items = listOf(

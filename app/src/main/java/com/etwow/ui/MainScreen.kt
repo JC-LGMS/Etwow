@@ -530,15 +530,22 @@ private fun Metric(label: String, value: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Largeur fixe : les trois valeurs et les trois libellés sont alignés en colonnes.
+        // Deux colonnes de largeur fixe : valeurs alignées à droite, libellés alignés à gauche.
         Text(
             value,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.End,
+            maxLines = 1,
             modifier = Modifier.width(104.dp),
         )
-        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.width(104.dp),
+        )
     }
 }
 
