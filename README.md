@@ -14,10 +14,11 @@ connus.
   20 octets des modèles récents (BR2262e-s / TK / ET-WOW), détectées automatiquement.
 - **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (si le firmware l'envoie),
   odomètre total.
-- **Commandes** : verrouillage/déverrouillage (uniquement à l'arrêt), phare, choix de la limite de
-  vitesse (6, 20, 25 ou 42 km/h selon le modèle).
-- **Widget** : 1×1, logo et coche verte quand la limite est à **25 km/h** (rouge sinon) ; un appui
-  passe à 25 km/h, réappuyer ne change rien.
+- **Commandes** : verrouillage/déverrouillage (uniquement à l'arrêt), phare, klaxon, zero start,
+  choix de la limite de vitesse (6, 20, 25 ou 42 km/h) et, sur les modèles récents, mode de
+  conduite (WALK/ECO/DRIVE/SPORT).
+- **Widget** : 1×1, logo et **point** vert quand la limite est à **25 km/h** (rouge sinon, gris hors
+  ligne) ; un appui passe à 25 km/h, et hors ligne il reconnecte puis applique 25 km/h.
 - **Phare automatique** : allumé 30 min avant le coucher, éteint 30 min après le lever, calculé
   localement à partir de la position ; priorité à une action manuelle jusqu'à la prochaine
   transition.

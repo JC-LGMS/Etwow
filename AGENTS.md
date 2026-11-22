@@ -194,6 +194,21 @@ Statut (octet 1 du type 3), bits vérifiés sur la machine : `0x80` zero start, 
 `0x10` phare, bits de poids faible = cran de limite (0 = 42, 1 = 6, 2 = 20, 3 = 25).
 Exemples observés : `0x00` = tout éteint, cran 0 ; `0x10` = phare seul.
 
+### Options prises en charge (au-delà de verrou/phare/limite)
+
+| Option | Ancien protocole | Nouveau protocole |
+|---|---|---|
+| Zero start | `55 03 05 <0|1>` | opcode `0E`, action 0/1 |
+| Remise à zéro du trip | `55 09 05 00` | opcode `0F`, action 0 |
+| Klaxon | `55 18 05 <ton>` | opcode `12`, action 0 |
+| Mode de conduite (WALK/ECO/DRIVE/SPORT) | — (ancien modèle non concerné) | opcode `09`, action 0..3 |
+| Unité km/miles | `55 08 05 <0|1>` | opcode `08` — **non implémenté** (changerait tous les affichages) |
+| Remise à zéro de l'odomètre | `55 09 05 01` | opcode `0F`, action 1 — **non implémenté** (destructif) |
+
+Le klaxon et la remise à zéro n'attendent pas de confirmation (aucune notification ne la porte) :
+`writeOnly` + journal. Le mode de conduite et la limite du nouveau protocole sont appliqués
+localement après écriture, faute de retour d'état dans les trames `0B`/`0C`.
+
 ### Nouveau protocole (appareils `BR2262e-s*`, `TK*`, `ET-WOW*`)
 
 L'application officielle choisit le format d'après le **nom** de l'appareil
@@ -217,8 +232,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   XOR), `decodeNew` (les deux trames sont ramenées à l'octet de statut commun 0x80/0x20/0x10/mode).
   `ScooterService` bascule sur le nouveau format dès que le nom de l'appareil ou la première trame
   le montrent ; le scan accepte les préfixes de noms et la caractéristique `FF04`.
-- **Non vérifié sur matériel** : aucun appareil de ce type n'a été testé ; seuls les tests unitaires
-  couvrent la construction des trames et le décodage des opcodes 0B/0C.
+- **Non vérifié sur matériel** : aucun appareil de ce type n'a été testé ; le *simulateur* sait
+  parler ce format (`Réglages` → « Simulateur, nouveau protocole » → `TK-SIM`), ce qui permet de
+  vérifier décodage, commandes et UI sur l'émulateur.
 
 ### Pièges de protocole
 
@@ -304,19 +320,16 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 
 ### Widget 25 km/h
 
-- Widget **1×1** : le logo seul et une coche **verte** quand la limite est à 25 km/h, **rouge**
-  quand elle ne l'est pas, **grise** quand la trottinette n'est pas connectée. Pas de texte, pas de
-  bouton.
+- Widget **1×1** : le logo et un **point** — **vert** à 25 km/h, **rouge** sinon, **gris** hors
+  ligne. Pas de texte, pas de bouton.
 - `updatePeriodMillis = 0` : le widget est mis à jour par le service à chaque changement d'état,
   pas par un réveil périodique.
 - Clic → `PendingIntent.getForegroundService` avec l'action `SET_25` ; le widget ne fait jamais de
   BLE lui-même (durée de vie d'un `BroadcastReceiver` trop courte).
-- **Tout le widget est cliquable** (`widget_root`) et ne fait qu'une chose : passer à 25 km/h.
-  Réappuyer ne change rien (plus de retour à la limite précédente, décidé par l'utilisateur le
-  22/11/2026). Ne pas réintroduire de bascule ni mémorisation du mode précédent.
-- Non connecté → démarrer le service, **ne pas mettre l'ordre en attente** : si le service tourne
-  déjà sans transport (déconnexion depuis l'UI), `SET_25` rappelle `restart()`.
-- La coche ne passe au vert qu'après la notification de confirmation du mode 3.
+- **Tout le widget est cliquable** et ne fait qu'une chose : passer à 25 km/h. Réappuyer ne change
+  rien (plus de retour à la limite précédente, décidé par l'utilisateur le 22/11/2026).
+- **Hors ligne, l'appui relance la connexion puis envoie 25 km/h dès qu'elle aboutit**
+  (`pending25`) : c'est un ordre différé assumé, contrairement aux autres commandes.
 
 ### Phare automatique
 

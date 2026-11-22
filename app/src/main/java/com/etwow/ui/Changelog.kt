@@ -12,6 +12,16 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.9",
+        date = "22/11/2026 23:10",
+        items = listOf(
+            "Nouvelles commandes : klaxon, zero start, remise à zéro du trip, mode de conduite sur les modèles récents.",
+            "Simulateur « nouveau protocole » dans les réglages, pour tester sans matériel.",
+            "Widget : le point remplace la coche ; hors ligne, un appui reconnecte puis passe à 25 km/h.",
+            "Tableau de bord : libellés sur la même ligne que les valeurs.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.8",
         date = "22/11/2026 22:53",
         items = listOf(

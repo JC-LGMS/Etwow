@@ -150,7 +150,9 @@ class EtwowProtocolTest {
         assertEquals(931.9, telemetry.odoKm!!, 0.0001)
         assertEquals(true, telemetry.lightOn)
         assertEquals(false, telemetry.locked)
-        assertEquals(SpeedModes.L2_20, telemetry.mode)
+        // 0x20 = DRIVE ; ce protocole ne transmet pas la limite de vitesse.
+        assertEquals(2, telemetry.driveMode)
+        assertNull(telemetry.mode)
     }
 
     @Test

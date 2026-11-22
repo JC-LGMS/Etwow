@@ -18,6 +18,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("simulator", false)
         set(value) = prefs.edit().putBoolean("simulator", value).apply()
 
+    /** Simulateur sur le nouveau protocole (trames de 20 octets), pour tester sans matériel. */
+    var simulatorNew: Boolean
+        get() = prefs.getBoolean("simulatorNew", false)
+        set(value) = prefs.edit().putBoolean("simulatorNew", value).apply()
+
     /**
      * Trip cumulé, calculé comme l'application officielle : somme des écarts d'odomètre.
      * La trottinette ne transmet pas le trip.

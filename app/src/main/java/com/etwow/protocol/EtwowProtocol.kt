@@ -35,6 +35,9 @@ object EtwowProtocol {
     fun lightOn(): ByteArray = frame(intArrayOf(0x06, 0x05, 0x01))
     fun lightOff(): ByteArray = frame(intArrayOf(0x06, 0x05, 0x00))
     fun setMode(mode: Int): ByteArray = frame(intArrayOf(0x02, 0x05, mode and 0x0F))
+    fun zeroStart(on: Boolean): ByteArray = frame(intArrayOf(0x03, 0x05, if (on) 1 else 0))
+    fun resetTrip(): ByteArray = frame(intArrayOf(0x09, 0x05, 0x00))
+    fun horn(): ByteArray = frame(intArrayOf(0x18, 0x05, 0x00))
 
     // --- nouveau protocole : AA 55 00 0D <opcode> <action> 00 ×12 <xor> 0D ---------------
 
@@ -58,6 +61,10 @@ object EtwowProtocol {
     fun lightOnNew(): ByteArray = newFrame(0x03, 1)
     fun lightOffNew(): ByteArray = newFrame(0x03, 0)
     fun setModeNew(mode: Int): ByteArray = newFrame(0x08, mode and 0x03)
+    fun zeroStartNew(on: Boolean): ByteArray = newFrame(0x0E, if (on) 1 else 0)
+    fun resetTripNew(): ByteArray = newFrame(0x0F, 0)
+    fun hornNew(): ByteArray = newFrame(0x12, 0)
+    fun driveModeNew(mode: Int): ByteArray = newFrame(0x09, mode and 0x03)
 
     /** Vrai si la trame est une notification du nouveau format, avec une somme XOR valide. */
     fun isNewFrame(bytes: ByteArray): Boolean {
@@ -86,13 +93,12 @@ object EtwowProtocol {
                         locked = (status and 0x01) != 0,
                         lightOn = null,
                         zeroStart = null,
-                        mode = null,
                     ),
                     tripKm = ((u(15) shl 8) or u(16)) / 10.0,
                 )
             }
 
-            // 0x0C : odomètre, phare, mode de conduite.
+            // 0x0C : odomètre, phare, zero start, mode de conduite.
             0x0C -> {
                 val flags = u(11)
                 val odo = (u(5) shl 24) or (u(6) shl 16) or (u(7) shl 8) or u(8)
@@ -102,14 +108,14 @@ object EtwowProtocol {
                         locked = null,
                         lightOn = (flags and 0x04) != 0,
                         zeroStart = (flags and 0x80) != 0,
-                        mode = when {
-                            u(10) and 0x04 != 0 -> SpeedModes.L3_25
-                            u(10) and 0x08 != 0 -> SpeedModes.L0_42
-                            u(10) and 0x10 != 0 -> SpeedModes.L1_6
-                            u(10) and 0x20 != 0 -> SpeedModes.L2_20
-                            else -> null
-                        },
                     ),
+                    driveMode = when {
+                        u(10) and 0x08 != 0 -> 0
+                        u(10) and 0x10 != 0 -> 1
+                        u(10) and 0x20 != 0 -> 2
+                        u(10) and 0x04 != 0 -> 3
+                        else -> null
+                    },
                     odoKm = odo / 10.0,
                 )
             }
@@ -123,14 +129,12 @@ object EtwowProtocol {
         locked: Boolean?,
         lightOn: Boolean?,
         zeroStart: Boolean?,
-        mode: Int?,
     ): Int? {
-        if (locked == null && lightOn == null && zeroStart == null && mode == null) return null
+        if (locked == null && lightOn == null && zeroStart == null) return null
         var status = 0
         if (locked == true) status = status or 0x20
         if (lightOn == true) status = status or 0x10
         if (zeroStart == true) status = status or 0x80
-        if (mode != null) status = status or (mode and 0x07)
         return status
     }
 
@@ -142,7 +146,11 @@ object EtwowProtocol {
         return when (type) {
             1 -> Telemetry(type, speedKmh = value / 10.0)
             2 -> value.takeIf { it in 0..100 }?.let { Telemetry(type, batteryPercent = it) }
-            3 -> Telemetry(type, status = notification[1].toInt() and 0xFF)
+            3 -> Telemetry(
+                type,
+                status = notification[1].toInt() and 0xFF,
+                speedMode = (notification[1].toInt() and 0xFF) and 0x07,
+            )
             4 -> Telemetry(type, odoKm = value / 10.0)
             else -> null
         }
@@ -158,11 +166,14 @@ data class Telemetry(
     val status: Int? = null,
     val odoKm: Double? = null,
     val tripKm: Double? = null,
+    val driveMode: Int? = null,
+    /** Cran de limite de vitesse, seulement si la trame le porte (ancien protocole). */
+    val speedMode: Int? = null,
 ) {
     // Bits du statut, d'après le parseur officiel : 0x80 zero start, 0x20 verrou, 0x10 phare,
     // les trois bits de poids faible portent le cran de limite.
     val lightOn: Boolean? get() = status?.let { (it and 0x10) != 0 }
     val locked: Boolean? get() = status?.let { (it and 0x20) != 0 }
     val zeroStart: Boolean? get() = status?.let { (it and 0x80) != 0 }
-    val mode: Int? get() = status?.let { it and 0x07 }
+    val mode: Int? get() = speedMode
 }

@@ -63,13 +63,19 @@ class ScooterService : Service(), ScooterTransport.Listener {
         const val ACTION_LIGHT_OFF = "com.etwow.action.LIGHT_OFF"
         const val ACTION_SET_MODE = "com.etwow.action.SET_MODE"
         const val ACTION_SET_25 = "com.etwow.action.SET_25"
+        const val ACTION_ZERO_START = "com.etwow.action.ZERO_START"
+        const val ACTION_HORN = "com.etwow.action.HORN"
+        const val ACTION_RESET_TRIP = "com.etwow.action.RESET_TRIP"
+        const val ACTION_DRIVE_MODE = "com.etwow.action.DRIVE_MODE"
         const val EXTRA_MODE = "mode"
+        const val EXTRA_ON = "on"
 
         fun start(context: Context) = send(context, ACTION_START)
 
-        fun send(context: Context, action: String, mode: Int? = null) {
+        fun send(context: Context, action: String, mode: Int? = null, on: Boolean? = null) {
             val intent = Intent(context, ScooterService::class.java).setAction(action)
             if (mode != null) intent.putExtra(EXTRA_MODE, mode)
+            if (on != null) intent.putExtra(EXTRA_ON, on)
             ContextCompat.startForegroundService(context, intent)
         }
     }
@@ -94,6 +100,9 @@ class ScooterService : Service(), ScooterTransport.Listener {
     // Nouveau protocole (trames de 20 octets) : décidé par le nom de l'appareil, ou dès la
     // première trame reçue qui en porte la signature.
     private var newProtocol = false
+
+    // Appui sur le widget hors ligne : envoyer 25 km/h dès que la connexion aboutit.
+    private var pending25 = false
 
     private data class Pending(val label: String, val matches: (ScooterSnapshot) -> Boolean)
 
@@ -143,6 +152,20 @@ class ScooterService : Service(), ScooterTransport.Listener {
 
             ACTION_SET_25 -> set25()
 
+            ACTION_ZERO_START -> {
+                val on = intent.getBooleanExtra(EXTRA_ON, true)
+                command(zeroStartFrame(on), "zero start") { it.zeroStart == on }
+            }
+
+            ACTION_HORN -> writeOnly(hornFrame(), "klaxon")
+
+            ACTION_RESET_TRIP -> resetTrip()
+
+            ACTION_DRIVE_MODE -> {
+                val mode = intent.getIntExtra(EXTRA_MODE, -1)
+                if (mode in 0..3) driveMode(mode)
+            }
+
             else -> if (transport == null) restart()
         }
         return START_STICKY
@@ -169,8 +192,9 @@ class ScooterService : Service(), ScooterTransport.Listener {
             )
         }
         ScooterBus.log(if (simulated) "mode simulateur" else "mode Bluetooth")
+        setNewProtocol(simulated && settings.simulatorNew)
         transport = if (simulated) {
-            SimulatedScooterTransport(this)
+            SimulatedScooterTransport(this, settings.simulatorNew)
         } else {
             BleScooterTransport(applicationContext, this)
         }.also { it.start() }
@@ -181,14 +205,33 @@ class ScooterService : Service(), ScooterTransport.Listener {
         transport?.stop()
         transport = null
         pending = null
-        ScooterBus.update { it.copy(pending = null, connection = Connection.Idle) }
+        clearTelemetry()
+        ScooterBus.update { it.copy(connection = Connection.Idle) }
         render()
+    }
+
+    /** Efface les valeurs de la trottinette précédente (le trip persisté reste). */
+    private fun clearTelemetry() {
+        ScooterBus.update {
+            it.copy(
+                speedKmh = null,
+                batteryPercent = null,
+                odoKm = null,
+                statusByte = null,
+                locked = null,
+                lightOn = null,
+                zeroStart = null,
+                driveMode = null,
+                mode = null,
+                pending = null,
+            )
+        }
     }
 
     override fun onConnection(state: Connection, name: String?, address: String?) {
         if (state != Connection.Connected) lastOdoKm = null
         if (state == Connection.Connected && name != null) {
-            newProtocol = EtwowProtocol.NEW_PROTOCOL_NAMES.any { name.startsWith(it) }
+            setNewProtocol(EtwowProtocol.NEW_PROTOCOL_NAMES.any { name.startsWith(it) })
         }
         ScooterBus.update {
             it.copy(
@@ -199,7 +242,14 @@ class ScooterService : Service(), ScooterTransport.Listener {
             )
         }
         render()
-        if (state == Connection.Connected) applyAutoLight()
+        if (state == Connection.Connected) {
+            applyAutoLight()
+            // Un appui sur le widget hors ligne doit aboutir à 25 km/h dès la connexion.
+            if (pending25) {
+                pending25 = false
+                set25()
+            }
+        }
     }
 
     override fun onNotification(bytes: ByteArray) {
@@ -210,7 +260,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
         }
         // Journal brut : c'est la seule façon de corriger un décodage faux sur la vraie machine.
         ScooterBus.log("← ${bytes.hex()}")
-        if (EtwowProtocol.isNewFrame(bytes)) newProtocol = true
+        if (EtwowProtocol.isNewFrame(bytes)) setNewProtocol(true)
         val odo = telemetry.odoKm
         ScooterBus.update { snap ->
             snap.copy(
@@ -221,6 +271,8 @@ class ScooterService : Service(), ScooterTransport.Listener {
                 statusByte = telemetry.status ?: snap.statusByte,
                 locked = telemetry.locked ?: snap.locked,
                 lightOn = telemetry.lightOn ?: snap.lightOn,
+                zeroStart = telemetry.zeroStart ?: snap.zeroStart,
+                driveMode = telemetry.driveMode ?: snap.driveMode,
                 mode = telemetry.mode ?: snap.mode,
             )
         }
@@ -245,6 +297,12 @@ class ScooterService : Service(), ScooterTransport.Listener {
         return trip
     }
 
+    private fun setNewProtocol(value: Boolean) {
+        if (newProtocol == value) return
+        newProtocol = value
+        ScooterBus.update { it.copy(newProtocol = value) }
+    }
+
     // --- commandes -----------------------------------------------------------------------
 
     private fun lockFrame(): ByteArray =
@@ -261,6 +319,22 @@ class ScooterService : Service(), ScooterTransport.Listener {
 
     private fun modeFrame(mode: Int): ByteArray =
         if (newProtocol) EtwowProtocol.setModeNew(mode) else EtwowProtocol.setMode(mode)
+
+    private fun zeroStartFrame(on: Boolean): ByteArray =
+        if (newProtocol) EtwowProtocol.zeroStartNew(on) else EtwowProtocol.zeroStart(on)
+
+    private fun hornFrame(): ByteArray =
+        if (newProtocol) EtwowProtocol.hornNew() else EtwowProtocol.horn()
+
+    private fun writeOnly(frame: ByteArray, label: String) {
+        val link = transport
+        if (link == null || ScooterBus.state.value.connection != Connection.Connected) {
+            ScooterBus.log("$label impossible : non connecté")
+            return
+        }
+        link.write(frame)
+        ScooterBus.log("$label envoyé")
+    }
 
     private fun lock() {
         val snap = ScooterBus.state.value
@@ -279,17 +353,42 @@ class ScooterService : Service(), ScooterTransport.Listener {
         command(lightFrame(on), "phare") { it.lightOn == on }
     }
 
-    private fun setMode(mode: Int) = command(
-        modeFrame(mode),
-        "limite ${SpeedModes.kmh(mode)} km/h",
-    ) { it.mode == mode }
+    private fun setMode(mode: Int) {
+        // Le nouveau protocole ne renvoie pas la limite : on l'applique localement après écriture.
+        if (newProtocol) {
+            writeOnly(modeFrame(mode), "limite ${SpeedModes.kmh(mode)} km/h")
+            ScooterBus.update { it.copy(mode = mode) }
+            return
+        }
+        command(modeFrame(mode), "limite ${SpeedModes.kmh(mode)} km/h") { it.mode == mode }
+    }
+
+    /** Le nouveau protocole ne renvoie pas la limite : on l'applique localement après écriture. */
+    private fun driveMode(mode: Int) {
+        if (!newProtocol) {
+            ScooterBus.log("mode de conduite : réservé au nouveau protocole")
+            return
+        }
+        writeOnly(EtwowProtocol.driveModeNew(mode), "mode de conduite")
+        ScooterBus.update { it.copy(driveMode = mode) }
+    }
+
+    private fun resetTrip() {
+        writeOnly(
+            if (newProtocol) EtwowProtocol.resetTripNew() else EtwowProtocol.resetTrip(),
+            "remise à zéro du trip",
+        )
+        settings.savedTripKm = 0.0
+        ScooterBus.update { it.copy(tripKm = 0.0) }
+    }
 
     /** Le widget ne fait qu'une chose : passer à 25 km/h, même s'il est déjà à 25. */
     private fun set25() {
         val snap = ScooterBus.state.value
         if (snap.connection != Connection.Connected) {
-            // Le widget démarre la connexion mais ne met jamais l'ordre en attente.
-            ScooterBus.log("widget : hors ligne, connexion demandée")
+            // Widget hors ligne : on relance la connexion et on enverra 25 km/h dès qu'elle aboutit.
+            ScooterBus.log("widget : hors ligne, connexion demandée puis 25 km/h")
+            pending25 = true
             if (transport == null) restart()
             return
         }

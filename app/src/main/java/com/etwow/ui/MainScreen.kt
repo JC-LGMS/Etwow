@@ -64,6 +64,9 @@ import com.etwow.service.ScooterService
 
 private enum class Page { Main, Settings, Info }
 
+/** Modes de conduite du nouveau protocole (opcode 09, actions 0..3). */
+private val DRIVE_MODES = listOf("WALK", "ECO", "DRIVE", "SPORT")
+
 @Composable
 fun MainScreen() {
     var page by remember { mutableStateOf(Page.Main) }
@@ -187,6 +190,11 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                         if (lightOn) ScooterService.ACTION_LIGHT_OFF else ScooterService.ACTION_LIGHT_ON,
                     )
                 }
+                OutlinedButton(
+                    onClick = { ScooterService.send(context, ScooterService.ACTION_HORN) },
+                    enabled = connected,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Klaxon") }
             }
             if (connected && state.speedKmh != 0.0) {
                 Text(
@@ -194,6 +202,40 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Zero start")
+                Switch(
+                    checked = state.zeroStart == true,
+                    enabled = connected,
+                    onCheckedChange = {
+                        ScooterService.send(context, ScooterService.ACTION_ZERO_START, on = it)
+                    },
+                )
+            }
+
+            if (state.newProtocol) {
+                Text("Mode de conduite : ${DRIVE_MODES[state.driveMode ?: -1] ?: "—"}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DRIVE_MODES.forEachIndexed { index, label ->
+                        val selected = state.driveMode == index
+                        OutlinedButton(
+                            onClick = { ScooterService.send(context, ScooterService.ACTION_DRIVE_MODE, mode = index) },
+                            enabled = connected,
+                            colors = if (selected) {
+                                ButtonDefaults.buttonColors()
+                            } else {
+                                ButtonDefaults.outlinedButtonColors()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text(label, fontSize = 10.sp, maxLines = 1) }
+                    }
+                }
             }
 
             Row(
@@ -248,6 +290,8 @@ private fun SettingsPage(onBack: () -> Unit) {
     val settings = remember { Settings(context) }
     var autoConnect by remember { mutableStateOf(settings.autoConnect) }
     var simulator by remember { mutableStateOf(settings.simulator) }
+    var simulatorNew by remember { mutableStateOf(settings.simulatorNew) }
+    var confirmReset by remember { mutableStateOf(false) }
 
     Screen {
         SubHeader("Réglages", onBack)
@@ -262,6 +306,17 @@ private fun SettingsPage(onBack: () -> Unit) {
                 settings.simulator = it
                 ScooterService.send(context, ScooterService.ACTION_RECONNECT)
             }
+            ToggleRow("Simulateur, nouveau protocole", simulatorNew) {
+                simulatorNew = it
+                settings.simulatorNew = it
+                ScooterService.send(context, ScooterService.ACTION_RECONNECT)
+            }
+            Text(
+                "Trip et odomètre sont remis à zéro sur la trottinette : action irréversible.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(onClick = { confirmReset = true }) { Text("Réinitialiser le trip") }
         }
         Text(
             "Développé par Jean-Cyril Poiraud avec OpenCode et Deepseek v4.1 Flash 1017",
@@ -269,6 +324,23 @@ private fun SettingsPage(onBack: () -> Unit) {
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Réinitialiser le trip ?") },
+            text = { Text("La trottinette remet son compteur de trajet à zéro. Reporter la valeur n'est pas possible.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    ScooterService.send(context, ScooterService.ACTION_RESET_TRIP)
+                }) { Text("Réinitialiser") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("Annuler") }
+            },
         )
     }
 }
@@ -445,7 +517,10 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun Metric(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.End) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

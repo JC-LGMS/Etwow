@@ -34,9 +34,9 @@ class SpeedLimitWidget : AppWidgetProvider() {
             val connected = snap.connection == Connection.Connected
             val at25 = connected && snap.mode == SpeedModes.L3_25
             val check = when {
-                !connected -> R.drawable.ic_check_gray
-                at25 -> R.drawable.ic_check_green
-                else -> R.drawable.ic_check_red
+                !connected -> R.drawable.ic_dot_gray
+                at25 -> R.drawable.ic_dot_green
+                else -> R.drawable.ic_dot_red
             }
             val description = when {
                 !connected -> R.string.widget_offline
@@ -44,7 +44,7 @@ class SpeedLimitWidget : AppWidgetProvider() {
                 else -> R.string.widget_not25
             }
             val views = RemoteViews(context.packageName, R.layout.widget_speed_limit)
-            views.setImageViewResource(R.id.widget_check, check)
+            views.setImageViewResource(R.id.widget_dot, check)
             if (Build.VERSION.SDK_INT >= 31) {
                 views.setContentDescription(R.id.widget_root, context.getString(description))
             }

@@ -15,10 +15,10 @@
         android:src="@drawable/ic_widget_logo" />
 
     <ImageView
-        android:id="@+id/widget_check"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:id="@+id/widget_dot"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
         android:layout_gravity="bottom|end"
         android:contentDescription="@null"
-        android:src="@drawable/ic_check_red" />
+        android:src="@drawable/ic_dot_red" />
 </FrameLayout>
