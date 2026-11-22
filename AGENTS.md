@@ -334,8 +334,16 @@ trame réelle.
 - Signature : `etwow-release.keystore` à la racine, alias `etwow`, mots de passe dans
   `keystore.properties` (**non versionné**). Même clé pour toutes les mises à jour ; sauvegarder
   les deux fichiers, sinon plus aucune mise à jour possible.
-- Clé pas encore créée. La générer une fois avec le `keytool` du JBR (le JDK de l'agent ne l'a
-  pas), puis vérifier : `apksigner.bat verify --print-certs <apk>`.
+- Clé **créée le 22/11/2026** avec le `keytool` du JBR (RSA 4096, 10 000 jours, alias `etwow`),
+  empreinte SHA-256 du certificat :
+  `e34ee14b04200da8937b16b57ac15977fbc74fd7a6f36336525fb06f231c0019`. Vérification :
+  `apksigner.bat verify --print-certs <apk>`.
+- `apksigner.bat` ne trouve pas Java tout seul : définir `JAVA_HOME` (celui du JDK de l'agent
+  suffit) avant de l'appeler, sinon « JAVA_HOME is not set » et code de sortie trompeur.
+- Release 0.2 publiée le 22/11/2026 (`gh release create v0.2 <apk>`), APK
+  `Etwow-0.2-release-20261122.apk` (1,41 Mo, R8), `mapping` copié en
+  `outputs/apk/release/mapping-0.2.txt`. La release a été installée sur l'émulateur après
+  désinstallation de la debug : vérifié qu'elle démarre, connecte le simulateur et affiche l'état.
 - Signatures debug ≠ release : installer une release par-dessus une debug exige une
   désinstallation (données perdues). **Ne jamais désinstaller, désactiver ni effacer les données
   d'une autre application sans accord explicite** — demander avant.
