@@ -18,11 +18,6 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("simulator", false)
         set(value) = prefs.edit().putBoolean("simulator", value).apply()
 
-    /** Limite à rétablir au second appui du widget ; null si jamais mémorisée. */
-    var previousMode: Int?
-        get() = prefs.getInt("previousMode", -1).takeIf { it >= 0 }
-        set(value) = prefs.edit().putInt("previousMode", value ?: -1).apply()
-
     var latitude: Double?
         get() = prefs.getFloat("latitude", 0f).takeIf { prefs.contains("latitude") }?.toDouble()
         set(value) = prefs.edit().putFloat("latitude", value?.toFloat() ?: 0f).apply {

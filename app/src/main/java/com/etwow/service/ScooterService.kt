@@ -26,7 +26,6 @@ import com.etwow.data.ScooterBus
 import com.etwow.data.ScooterSnapshot
 import com.etwow.data.Settings
 import com.etwow.protocol.EtwowProtocol
-import com.etwow.protocol.SpeedLimitToggle
 import com.etwow.protocol.SpeedModes
 import com.etwow.protocol.hex
 import com.etwow.solar.AutoLight
@@ -62,7 +61,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
         const val ACTION_LIGHT_ON = "com.etwow.action.LIGHT_ON"
         const val ACTION_LIGHT_OFF = "com.etwow.action.LIGHT_OFF"
         const val ACTION_SET_MODE = "com.etwow.action.SET_MODE"
-        const val ACTION_TOGGLE_25 = "com.etwow.action.TOGGLE_25"
+        const val ACTION_SET_25 = "com.etwow.action.SET_25"
         const val EXTRA_MODE = "mode"
 
         fun start(context: Context) = send(context, ACTION_START)
@@ -125,7 +124,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
                 if (mode in SpeedModes.all) setMode(mode)
             }
 
-            ACTION_TOGGLE_25 -> toggle25()
+            ACTION_SET_25 -> set25()
 
             else -> if (transport == null) restart()
         }
@@ -237,17 +236,17 @@ class ScooterService : Service(), ScooterTransport.Listener {
         "limite ${SpeedModes.kmh(mode)} km/h",
     ) { it.mode == mode }
 
-    private fun toggle25() {
+    /** Le widget ne fait qu'une chose : passer à 25 km/h, même s'il est déjà à 25. */
+    private fun set25() {
         val snap = ScooterBus.state.value
-        if (snap.connection != Connection.Connected || snap.mode == null) {
+        if (snap.connection != Connection.Connected) {
             // Le widget démarre la connexion mais ne met jamais l'ordre en attente.
             ScooterBus.log("widget : hors ligne, connexion demandée")
             if (transport == null) restart()
             return
         }
-        val decision = SpeedLimitToggle.toggle(snap.mode, settings.previousMode) ?: return
-        settings.previousMode = decision.newPrevious
-        setMode(decision.targetMode)
+        if (snap.mode == SpeedModes.L3_25) return
+        setMode(SpeedModes.L3_25)
     }
 
     private fun command(frame: ByteArray, label: String, matches: (ScooterSnapshot) -> Boolean) {
@@ -304,7 +303,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
         val summary = when {
             day.polarDay -> "jour polaire · phare éteint"
             day.polarNight -> "nuit polaire · phare allumé"
-            else -> "coucher ${day.sunset?.format(format) ?: "—"} · lever ${day.sunrise?.format(format) ?: "—"}"
+            else -> "lever ${day.sunrise?.format(format) ?: "—"} · coucher ${day.sunset?.format(format) ?: "—"}"
         }
         ScooterBus.update { it.copy(autoLight = settings.autoLight, solarSummary = summary) }
 

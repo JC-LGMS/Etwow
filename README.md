@@ -13,10 +13,11 @@ connus.
 - **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (trip), odomètre total.
 - **Commandes** : verrouillage/déverrouillage (uniquement à l'arrêt), phare, choix de la limite de
   vitesse (6, 20, 25 ou 42 km/h selon le modèle).
-- **Widget** : tout le widget est cliquable ; un appui bascule la limite à **25 km/h**, le suivant
-  restaure la limite précédente.
-- **Phare automatique** : allumé du coucher au lever du soleil, calculé localement à partir de la
-  position ; priorité à une action manuelle jusqu'à la prochaine transition.
+- **Widget** : 1×1, logo et coche verte quand la limite est à **25 km/h** (rouge sinon) ; un appui
+  passe à 25 km/h, réappuyer ne change rien.
+- **Phare automatique** : allumé 30 min avant le coucher, éteint 30 min après le lever, calculé
+  localement à partir de la position ; priorité à une action manuelle jusqu'à la prochaine
+  transition.
 - **Trois écrans** : tableau de bord et commandes, *Réglages*, *Informations techniques* (état
   décodé, trames brutes horodatées, liaison).
 - **Mode simulateur** : indispensable sur l'émulateur, qui n'a pas de Bluetooth.

@@ -64,7 +64,8 @@ object SolarTimes {
 }
 
 object AutoLight {
-    const val MARGIN_MINUTES = 15L
+    /** Phare allumé 30 min avant le coucher, éteint 30 min après le lever. */
+    const val MARGIN_MINUTES = 30L
 
     fun shouldBeOn(
         now: ZonedDateTime,

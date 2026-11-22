@@ -56,14 +56,14 @@ class SolarTimesTest {
     }
 
     @Test
-    fun `marge de quinze minutes autour des transitions`() {
+    fun `marge de trente minutes autour des transitions`() {
         val day = SolarTimes.forDate(LocalDate.of(2026, 6, 21), 48.8566, 2.3522, paris)
-        // Coucher 21:57 : allumé dès 21:42, encore éteint à 21:40.
-        assertTrue(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 21, 43, 0, 0, paris), day))
-        assertFalse(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 21, 40, 0, 0, paris), day))
-        // Lever 05:46 : éteint dès 06:01, encore allumé à 05:59.
-        assertFalse(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 6, 2, 0, 0, paris), day))
-        assertTrue(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 5, 59, 0, 0, paris), day))
+        // Coucher 21:57 : allumé dès 21:27, encore éteint à 21:25.
+        assertTrue(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 21, 28, 0, 0, paris), day))
+        assertFalse(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 21, 25, 0, 0, paris), day))
+        // Lever 05:46 : éteint dès 06:16, encore allumé à 06:14.
+        assertFalse(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 6, 17, 0, 0, paris), day))
+        assertTrue(AutoLight.shouldBeOn(ZonedDateTime.of(2026, 6, 21, 6, 14, 0, 0, paris), day))
     }
 
     @Test
@@ -72,6 +72,6 @@ class SolarTimesTest {
         val noon = ZonedDateTime.of(2026, 6, 21, 12, 0, 0, 0, paris)
         val next = AutoLight.nextTransition(noon, day)!!
         assertEquals(21, next.hour)
-        assertEquals(42, next.minute)
+        assertEquals(27, next.minute)
     }
 }

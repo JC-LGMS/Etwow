@@ -11,8 +11,8 @@ Application Android compagnon d'une trottinette électrique ETWOW connectée en 
 - connexion automatique dès que la trottinette s'allume (service de premier plan) ;
 - tableau de bord : vitesse, batterie, distance depuis l'allumage, odomètre total ;
 - commandes : verrouillage/déverrouillage, phare, limite de vitesse ;
-- widget : bascule la limite à 25 km/h puis restaure la précédente ;
-- phare automatique du coucher au lever du soleil (calcul local, override manuel) ;
+- widget 1×1 : logo + coche verte à 25 km/h (rouge sinon), un appui passe à 25 km/h ;
+- phare automatique 30 min avant le coucher et 30 min après le lever (calcul local, override manuel) ;
 - informations techniques : état décodé, trames brutes, liaison BLE ;
 - mode simulateur pour vérifier sur l'émulateur, qui n'a pas de Bluetooth.
 
@@ -198,8 +198,7 @@ trame réelle.
   isolées ici et testées.
 - `service/ScooterService` : service de premier plan, propriétaire unique de la connexion GATT,
   auto-connexion, phare automatique, actions du widget, écriture de l'état partagé.
-- `data/Settings` : `SharedPreferences` (auto-connexion, phare auto, dernier appareil, mode
-  précédent du widget, override manuel, position).
+- `data/Settings` : `SharedPreferences` (auto-connexion, phare auto, simulateur, position).
 - `solar/SolarTimes` : calcul pur lever/coucher (algorithme NOAA), sans réseau.
 - `ui/` : `MainScreen.kt` porte trois écrans dans le même composable (`Page.Main`,
   `Page.Settings`, `Page.Info`) — pas de bibliothèque de navigation : un `remember` + une ligne
@@ -239,21 +238,19 @@ trame réelle.
 
 ### Widget 25 km/h
 
-- Widget simple : `RemoteViews`, **pas Glance** (une seule action, aucune dépendance en plus).
+- Widget **1×1** : le logo seul et une coche **verte** quand la limite est à 25 km/h, **rouge**
+  quand elle ne l'est pas, **grise** quand la trottinette n'est pas connectée. Pas de texte, pas de
+  bouton.
 - `updatePeriodMillis = 0` : le widget est mis à jour par le service à chaque changement d'état,
   pas par un réveil périodique.
-- Clic → `PendingIntent.getForegroundService` avec l'action `TOGGLE_25` ; le widget ne fait jamais
-  de BLE lui-même (durée de vie d'un `BroadcastReceiver` trop courte).
-- **Tout le widget est cliquable** (`widget_root`), pas seulement un bouton : la ligne d'aide
-  « Toucher : passer à 25 km/h » / « rétablir la limite » annonce l'action. C'est une demande de
-  l'utilisateur du 22/11/2026 ; ne pas réintroduire de bouton.
-- Sémantique : connecté et mode ≠ 3 → mémoriser le mode courant, envoyer le mode 3 ; connecté et
-  mode = 3 → renvoyer le mode mémorisé (à défaut, mode 2 = 20 km/h) ; non connecté → démarrer le
-  service, afficher « connexion… », **ne pas mettre l'ordre en attente**.
-  Le démarrage doit vraiment relancer la liaison : si le service tourne déjà sans transport
-  (déconnexion depuis l'UI), `TOGGLE_25` rappelle `restart()`, sinon le clic ne fait rien.
-- N'afficher le nouveau mode qu'après la notification de confirmation ; entre-temps, « envoi… ».
-- Le widget affiche l'état de connexion ; un mode ancien ne doit pas être présenté comme actuel.
+- Clic → `PendingIntent.getForegroundService` avec l'action `SET_25` ; le widget ne fait jamais de
+  BLE lui-même (durée de vie d'un `BroadcastReceiver` trop courte).
+- **Tout le widget est cliquable** (`widget_root`) et ne fait qu'une chose : passer à 25 km/h.
+  Réappuyer ne change rien (plus de retour à la limite précédente, décidé par l'utilisateur le
+  22/11/2026). Ne pas réintroduire de bascule ni mémorisation du mode précédent.
+- Non connecté → démarrer le service, **ne pas mettre l'ordre en attente** : si le service tourne
+  déjà sans transport (déconnexion depuis l'UI), `SET_25` rappelle `restart()`.
+- La coche ne passe au vert qu'après la notification de confirmation du mode 3.
 
 ### Phare automatique
 
@@ -261,8 +258,10 @@ trame réelle.
   (`ZonedDateTime`, donc changement d'heure géré). Aucun appel réseau.
 - Position : `LocationManager.getLastKnownLocation` avec `ACCESS_COARSE_LOCATION` ; si absente,
   réglage manuel de coordonnées ou de ville. Sans position, désactiver le phare auto et le dire.
-- Marge de 15 min avant le coucher et après le lever, avec hystérésis : n'envoyer la commande
-  qu'au changement d'état, pas à chaque notification.
+- Marge de 30 min avant le coucher et après le lever (allumé 30 min avant le coucher, éteint
+  30 min après le lever), avec hystérésis : n'envoyer la commande qu'au changement d'état, pas à
+  chaque notification.
+- Le résumé affiche le lever avant le coucher : « lever 08:09 · coucher 17:04 ».
 - Une action manuelle sur le phare suspend l'automatisme **jusqu'à la prochaine transition** ; le
   réglage reste activé. Ne pas se battre avec l'utilisateur.
 - Cas polaires (aucun lever/coucher) : ne pas planter, désactiver l'automatisme pour la journée.
@@ -361,10 +360,10 @@ trame réelle.
 2. Verrouiller à l'arrêt : l'état passe à verrouillé ; à vitesse > 0, le bouton est désactivé et
    aucune trame n'est envoyée.
 3. Phare on/off, puis chaque limite (6/20/25/42) : la valeur affichée suit la notification.
-4. Widget : premier appui → 25, second → limite précédente ; état « connexion… » si le service
-   n'est pas lancé.
-5. Phare auto : injecter une heure/position de test, vérifier l'allumage au coucher et l'extinction
-   au lever, l'hystérésis et l'override manuel.
+4. Widget 1×1 : coche grise hors ligne, rouge hors 25, appui → 25 puis coche verte ; un second
+   appui reste à 25 ; hors ligne, l'appui relance la connexion sans mettre l'ordre en attente.
+5. Phare auto : injecter une heure/position de test, vérifier l'allumage 30 min avant le coucher et
+   l'extinction 30 min après le lever, l'hystérésis et l'override manuel.
 6. Infos techniques : trames brutes, décodage, copie du journal.
 7. Couper la liaison simulée : l'UI passe hors ligne, puis se reconnecte et relit l'état.
 
@@ -374,7 +373,7 @@ trame réelle.
 2. Éteindre/rallumer la trottinette : mesurer le délai de reconnexion automatique.
 3. Comparer vitesse, batterie, trip et odomètre avec l'afficheur de la trottinette.
 4. Verrouiller/déverrouiller à l'arrêt ; refuser le verrou en roulant.
-5. Phare on/off ; bascule widget 25 ↔ précédent ; vérifier la notification de confirmation.
+5. Phare on/off ; appui widget → 25 (coche verte) et le reste ; vérifier la notification de confirmation.
 6. Phare auto au coucher (ou avancer l'heure du téléphone) ; vérifier l'override manuel.
 7. Infos techniques : noter toute trame inconnue pour l'analyse.
 

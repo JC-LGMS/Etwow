@@ -12,6 +12,16 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.2",
+        date = "22/11/2026 01:07",
+        items = listOf(
+            "Widget 1×1 : logo et coche verte à 25 km/h, rouge sinon, grise hors ligne ; un appui passe toujours à 25.",
+            "Données du tableau de bord plus compactes et alignées à droite de la vitesse.",
+            "Phare automatique : 30 min avant le coucher et 30 min après le lever, lever affiché avant coucher.",
+            "Crédits de développement dans les réglages.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.1",
         date = "22/11/2026 00:49",
         items = listOf(

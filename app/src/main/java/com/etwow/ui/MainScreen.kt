@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.etwow.BuildConfig
@@ -139,7 +140,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 }
                 Column(
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Metric("Batterie", state.batteryPercent?.let { "$it %" } ?: "—")
                     Metric("Depuis l'allumage", state.tripKm?.let { "$it km" } ?: "—")
@@ -188,7 +189,14 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Phare automatique")
+                Column {
+                    Text("Phare automatique")
+                    Text(
+                        state.solarSummary ?: "—",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
                 Switch(
                     checked = autoLight,
                     onCheckedChange = {
@@ -198,11 +206,6 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     },
                 )
             }
-            Text(
-                state.solarSummary ?: "—",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp,
-            )
 
             Text("Limite de vitesse : ${state.mode?.let { SpeedModes.label(it) } ?: "—"}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -248,6 +251,13 @@ private fun SettingsPage(onBack: () -> Unit) {
                 ScooterService.send(context, ScooterService.ACTION_RECONNECT)
             }
         }
+        Text(
+            "Développé par Jean-Cyril Poiraud avec OpenCode et Deepseek v4.1 Flash 1017",
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -419,9 +429,9 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun Metric(label: String, value: String) {
-    Column {
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(horizontalAlignment = Alignment.End) {
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

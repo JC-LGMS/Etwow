@@ -24,21 +24,3 @@ object SpeedModes {
         else -> "mode $mode"
     }
 }
-
-/** Bascule du widget : 25 km/h <-> limite précédente. */
-object SpeedLimitToggle {
-    const val MODE_25 = SpeedModes.L3_25
-    const val FALLBACK = SpeedModes.L2_20
-
-    data class Decision(val targetMode: Int, val newPrevious: Int?)
-
-    fun toggle(currentMode: Int?, previousMode: Int?): Decision? {
-        if (currentMode == null) return null
-        return if (currentMode == MODE_25) {
-            val restore = previousMode?.takeIf { it != MODE_25 } ?: FALLBACK
-            Decision(restore, null)
-        } else {
-            Decision(MODE_25, currentMode)
-        }
-    }
-}
