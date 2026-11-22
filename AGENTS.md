@@ -276,7 +276,8 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   `LISTE[etat ?: -1]` a planté en 0.9 ; utiliser `getOrNull`.
 - Indicateur de défilement : **Compose Android n'en fournit pas** (`VerticalScrollbar` est une API
   desktop). `ScrollIndicator` dans `MainScreen.kt` calcule la barre à partir de
-  `ScrollState.value` / `maxValue` et de la hauteur de la vue.
+  `ScrollState.value` / `maxValue` et de la hauteur de la vue ; la colonne de 16 dp est saisissable
+  et se glisse avec `draggable` → `ScrollState.dispatchRawDelta` (pas de coroutine nécessaire).
 
 ### Connexion automatique
 

@@ -11,6 +11,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -607,12 +610,12 @@ private fun ChangelogDialog(onDismiss: () -> Unit) {
 
 /**
  * Indicateur de position vertical (Compose Android n'en fournit pas) : barre fine dont la
- * hauteur et la position suivent le défilement.
+ * hauteur et la position suivent le défilement, et qu'on peut glisser pour défiler.
  */
 @Composable
 private fun ScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
     if (state.maxValue <= 0) return
-    BoxWithConstraints(modifier.width(4.dp)) {
+    BoxWithConstraints(modifier.width(16.dp)) {
         val density = LocalDensity.current
         val viewport = constraints.maxHeight.toFloat()
         val content = viewport + state.maxValue
@@ -620,21 +623,36 @@ private fun ScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
             .coerceAtLeast(with(density) { 24.dp.toPx() })
             .coerceAtMost(viewport)
         val scrollable = viewport - thumb
-        val offset = if (state.maxValue > 0) {
-            state.value.toFloat() / state.maxValue * scrollable
-        } else {
-            0f
-        }
+        val offset = state.value.toFloat() / state.maxValue * scrollable
+        // Le pouce ne parcourt que `scrollable` px : un px de doigt vaut maxValue / scrollable px de contenu.
+        val ratio = if (scrollable > 0f) state.maxValue / scrollable else 1f
+        // Toute la colonne est saisissable (16 dp), pas seulement le pouce de 4 dp.
         Box(
             Modifier
-                .offset { IntOffset(0, offset.toInt()) }
-                .fillMaxWidth()
-                .height(with(density) { thumb.toDp() })
-                .background(
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                    RoundedCornerShape(2.dp),
+                .fillMaxSize()
+                .draggable(
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { state.dispatchRawDelta(it * ratio) },
                 ),
         )
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .offset { IntOffset(0, offset.toInt()) }
+                .fillMaxWidth()
+                .height(with(density) { thumb.toDp() }),
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(4.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        RoundedCornerShape(2.dp),
+                    ),
+            )
+        }
     }
 }
 

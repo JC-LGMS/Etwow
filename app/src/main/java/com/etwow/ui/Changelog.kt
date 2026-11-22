@@ -12,6 +12,13 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.14",
+        date = "22/11/2026 23:55",
+        items = listOf(
+            "La barre de défilement du journal et des trames peut être glissée pour défiler.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.13",
         date = "22/11/2026 23:43",
         items = listOf(
