@@ -144,6 +144,18 @@ d'envoyer quoi que ce soit. Écrire **avec réponse** sur Android.
 | Zero start on/off (hors périmètre) | `55 03 05 01 5E` / `55 03 05 00 5D` |
 | Init compteur (dangereux, ne pas envoyer) | `55 09 05 00 63` (trip) / `55 09 05 01 64` (odomètre) |
 | Change d'unité (km/miles, non utilisé) | `55 08 05 00` / `55 08 05 01` |
+| Klaxon, réglage du son (non utilisé) | `55 18 05 <arg> <somme>` — opcode 0x18 |
+
+Source des opcodes : application officielle **E-TWOW 4.4 (XAPK APKPure, `e.twow2`)** décompilée
+le 22/11/2026. C'est une application **uni-app** : la logique est dans
+`assets/apps/__UNI__4B5207A/www/app-service.js`, constante `deviceBluetooth`
+(`lightBluetooth:6, mainSpeedLimitBluetooth:2, lockScooterBluetooth:5,
+changeUnitBluetooth:8, zeroStartBluetooth:3, resetKmBluetooth:9, resetTripBluetooth:0,
+resetOddoBluetooth:1, hornToneBluetooth:24`). L'app distingue « nouvel appareil » (trames de
+20 octets `AA 55 00 0D <opcode> <arg> … XOR 0D`) et « ancien appareil » (trame `55 <opcode> 05 <arg>
+<somme>`, `oldBuildValueBase`) : nos scooters sont dans le second cas. Opcodes du nouveau format,
+pour mémoire et non utilisés ici : 5/6 clignotants, 8 unité, 9 mode (0=WALK,1=ECO,2=DRIVE,3=SPORT),
+11/12/13 lectures d'état, 18/21/22 klaxon et divers.
 
 ### Notifications
 
@@ -163,10 +175,16 @@ somme de contrôle (somme des octets précédents).
 | 4 | `04 67 24 8F` | distance = int16LE / 10 → 0x2467/10 = **931,9 km** (odomètre affiché : 931) |
 | 5 | `05 31 32 33 34 9D` | **absent du parseur officiel** (6 octets, « 1234 ») : ignoré |
 
-Conséquences vérifiées sur la machine de test (22/11/2026) :
+Conséquences vérifiées sur la machine de test (22/11/2026), confirmées par le code de l'app
+officielle 4.4 (`case 4` du parseur « ancien appareil ») :
 - le **type 4 est l'odomètre**, pas le trip : sa valeur colle à l'afficheur ;
-- le **trip n'est pas transmis** par ce modèle — l'application affiche « — » ;
-- l'ancienne formule de vitesse `lo + (flag ? 255 : 0)` était fausse au-delà de 25,5 km/h.
+- le **trip n'est pas transmis** : l'app officielle le **calcule** en cumulant les écarts
+  d'odomètre et le persiste (`saved_trip`). C'est ce que fait `ScooterService.updateTrip`, avec la
+  valeur en `SharedPreferences` (`savedTrip`) ; un odomètre qui recule = compteur remis à zéro ;
+- l'ancienne formule de vitesse `lo + (flag ? 255 : 0)` était fausse au-delà de 25,5 km/h ;
+- **polarité du verrou à confirmer** : le code officiel lit `be[2]` (0x20) et l'inverse
+  (`lock = bit ? "0" : "1"`). Notre app considère 0x20 = verrouillé ; à vérifier en verrouillant
+  sur la machine réelle (l'UI affiche l'état décodé).
 
 Le projet `simonrey1/etwowconnect2` lit les octets un par un (`hi + lo`, `b2+b1+b0`, etc.) : ses
 formules sont fausses au-delà de 255 et ne doivent pas servir de référence. Seul le jeu de commandes

@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.7",
+        date = "22/11/2026 22:43",
+        items = listOf(
+            "Trip calculé comme l'application officielle : cumul des écarts d'odomètre, conservé entre les sessions.",
+            "Opcodes vérifiés dans l'APK officielle E-TWOW 4.4 (verrou, phare, limite, zero start, unité, reset, klaxon).",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.6",
         date = "22/11/2026 19:35",
         items = listOf(

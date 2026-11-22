@@ -25,6 +25,7 @@ import com.etwow.data.Connection
 import com.etwow.data.ScooterBus
 import com.etwow.data.ScooterSnapshot
 import com.etwow.data.Settings
+import com.etwow.data.TripMeter
 import com.etwow.protocol.EtwowProtocol
 import com.etwow.protocol.SpeedModes
 import com.etwow.protocol.hex
@@ -85,6 +86,10 @@ class ScooterService : Service(), ScooterTransport.Listener {
     // Override manuel du phare : suspendu jusqu'à la prochaine transition calculée.
     private var lightOverride = false
     private var lightOverrideDesired = false
+
+    // Trip : la trottinette ne le transmet pas ; on cumule les écarts d'odomètre, comme l'app
+    // officielle. lastOdoKm repart à zéro à chaque connexion pour ne pas compter le trajet hors ligne.
+    private var lastOdoKm: Double? = null
 
     private data class Pending(val label: String, val matches: (ScooterSnapshot) -> Boolean)
 
@@ -177,6 +182,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onConnection(state: Connection, name: String?, address: String?) {
+        if (state != Connection.Connected) lastOdoKm = null
         ScooterBus.update {
             it.copy(
                 connection = state,
@@ -197,11 +203,13 @@ class ScooterService : Service(), ScooterTransport.Listener {
         }
         // Journal brut : c'est la seule façon de corriger un décodage faux sur la vraie machine.
         ScooterBus.log("← ${bytes.hex()}")
+        val odo = telemetry.odoKm
         ScooterBus.update { snap ->
             snap.copy(
                 speedKmh = telemetry.speedKmh ?: snap.speedKmh,
                 batteryPercent = telemetry.batteryPercent ?: snap.batteryPercent,
                 odoKm = telemetry.odoKm ?: snap.odoKm,
+                tripKm = if (odo != null) updateTrip(odo) else snap.tripKm,
                 statusByte = telemetry.status ?: snap.statusByte,
                 locked = telemetry.locked ?: snap.locked,
                 lightOn = telemetry.lightOn ?: snap.lightOn,
@@ -218,6 +226,15 @@ class ScooterService : Service(), ScooterTransport.Listener {
     override fun onLog(line: String) {
         ScooterBus.log(line)
         render()
+    }
+
+    /** Trip = somme des écarts d'odomètre, persistée ; voir [TripMeter]. */
+    private fun updateTrip(odo: Double): Double {
+        val previous = lastOdoKm
+        lastOdoKm = odo
+        val trip = TripMeter.next(settings.savedTripKm, previous, odo)
+        if (trip != settings.savedTripKm) settings.savedTripKm = trip
+        return trip
     }
 
     // --- commandes -----------------------------------------------------------------------

@@ -18,6 +18,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("simulator", false)
         set(value) = prefs.edit().putBoolean("simulator", value).apply()
 
+    /**
+     * Trip cumulé, calculé comme l'application officielle : somme des écarts d'odomètre.
+     * La trottinette ne transmet pas le trip.
+     */
+    var savedTripKm: Double
+        get() = prefs.getFloat("savedTrip", 0f).toDouble()
+        set(value) = prefs.edit().putFloat("savedTrip", value.toFloat()).apply()
+
     var latitude: Double?
         get() = prefs.getFloat("latitude", 0f).takeIf { prefs.contains("latitude") }?.toDouble()
         set(value) = prefs.edit().putFloat("latitude", value?.toFloat() ?: 0f).apply {
