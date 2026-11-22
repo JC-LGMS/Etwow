@@ -194,6 +194,32 @@ Statut (octet 1 du type 3), bits vérifiés sur la machine : `0x80` zero start, 
 `0x10` phare, bits de poids faible = cran de limite (0 = 42, 1 = 6, 2 = 20, 3 = 25).
 Exemples observés : `0x00` = tout éteint, cran 0 ; `0x10` = phare seul.
 
+### Nouveau protocole (appareils `BR2262e-s*`, `TK*`, `ET-WOW*`)
+
+L'application officielle choisit le format d'après le **nom** de l'appareil
+(`checkDevice` → préfixes ci-dessus). Même service FFE0/FF00, mêmes caractéristiques.
+
+- **Commande** : 20 octets `AA 55 00 0D <opcode> <action> 00 ×12 <XOR des octets 0..17> 0D`.
+  Opcodes utiles : `01` verrou (1 = verrouiller), `03` phare (1 = allumer), `04` petits feux,
+  `08` limite (action 0..3 = 42/6/20/25), `09` mode de conduite (0 WALK, 1 ECO, 2 DRIVE, 3 SPORT),
+  `05`/`06` clignotants, `18` klaxon, `0B`/`0C`/`0D` lectures d'état.
+- **Notification** : 20 octets, `byte[4]` = opcode, XOR des octets 0..17 en `byte[18]`, `0D` en
+  `byte[19]`.
+  - opcode `0B` : vitesse (`byte[13]`, km/h entier), batterie (`byte[14]`, %), **trip**
+    (`byte[15..16]` big-endian / 10), verrou (`byte[17]` bit0), frein (bit2), tension
+    (`byte[5..6]`/100), courant, températures.
+  - opcode `0C` : **odomètre** 32 bits big-endian `byte[5..8]` / 10, phare (`byte[11]` 0x04),
+    zero start (`byte[11]` 0x80), mode de conduite one-hot dans `byte[10]` (0x08 WALK, 0x10 ECO,
+    0x20 DRIVE, 0x04 SPORT), bits d'état batterie/moteur dans `byte[11]`.
+- Le nouveau protocole **transmet le trip** : dans ce cas l'application l'affiche tel quel, sans
+  cumul d'écarts (le cumul reste le repli pour l'ancien protocole).
+- Implémentation : `EtwowProtocol.newFrame/lockNew/lightOnNew/setModeNew`, `isNewFrame` (signature +
+  XOR), `decodeNew` (les deux trames sont ramenées à l'octet de statut commun 0x80/0x20/0x10/mode).
+  `ScooterService` bascule sur le nouveau format dès que le nom de l'appareil ou la première trame
+  le montrent ; le scan accepte les préfixes de noms et la caractéristique `FF04`.
+- **Non vérifié sur matériel** : aucun appareil de ce type n'a été testé ; seuls les tests unitaires
+  couvrent la construction des trames et le décodage des opcodes 0B/0C.
+
 ### Pièges de protocole
 
 - **Ne jamais verrouiller en roulant.** Le projet public refuse le verrouillage si la vitesse

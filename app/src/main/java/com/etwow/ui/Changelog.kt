@@ -12,6 +12,15 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.8",
+        date = "22/11/2026 22:53",
+        items = listOf(
+            "Prise en charge du nouveau protocole (appareils BR2262e-s / TK / ET-WOW) : trames de 20 octets, XOR.",
+            "Décodage des opcodes 0B (vitesse, batterie, verrou, trip) et 0C (odomètre, phare, mode).",
+            "Commandes correspondantes : verrou, phare, limite, avec bascule automatique au format détecté.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.7",
         date = "22/11/2026 22:43",
         items = listOf(

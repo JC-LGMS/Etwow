@@ -91,6 +91,10 @@ class ScooterService : Service(), ScooterTransport.Listener {
     // officielle. lastOdoKm repart à zéro à chaque connexion pour ne pas compter le trajet hors ligne.
     private var lastOdoKm: Double? = null
 
+    // Nouveau protocole (trames de 20 octets) : décidé par le nom de l'appareil, ou dès la
+    // première trame reçue qui en porte la signature.
+    private var newProtocol = false
+
     private data class Pending(val label: String, val matches: (ScooterSnapshot) -> Boolean)
 
     override fun onCreate() {
@@ -127,7 +131,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
             ACTION_RECONNECT -> restart()
 
             ACTION_LOCK -> lock()
-            ACTION_UNLOCK -> command(EtwowProtocol.unlock(), "déverrouillage") { it.locked == false }
+            ACTION_UNLOCK -> command(unlockFrame(), "déverrouillage") { it.locked == false }
 
             ACTION_LIGHT_ON -> manualLight(on = true)
             ACTION_LIGHT_OFF -> manualLight(on = false)
@@ -183,6 +187,9 @@ class ScooterService : Service(), ScooterTransport.Listener {
 
     override fun onConnection(state: Connection, name: String?, address: String?) {
         if (state != Connection.Connected) lastOdoKm = null
+        if (state == Connection.Connected && name != null) {
+            newProtocol = EtwowProtocol.NEW_PROTOCOL_NAMES.any { name.startsWith(it) }
+        }
         ScooterBus.update {
             it.copy(
                 connection = state,
@@ -203,13 +210,14 @@ class ScooterService : Service(), ScooterTransport.Listener {
         }
         // Journal brut : c'est la seule façon de corriger un décodage faux sur la vraie machine.
         ScooterBus.log("← ${bytes.hex()}")
+        if (EtwowProtocol.isNewFrame(bytes)) newProtocol = true
         val odo = telemetry.odoKm
         ScooterBus.update { snap ->
             snap.copy(
                 speedKmh = telemetry.speedKmh ?: snap.speedKmh,
                 batteryPercent = telemetry.batteryPercent ?: snap.batteryPercent,
                 odoKm = telemetry.odoKm ?: snap.odoKm,
-                tripKm = if (odo != null) updateTrip(odo) else snap.tripKm,
+                tripKm = telemetry.tripKm ?: if (odo != null) updateTrip(odo) else snap.tripKm,
                 statusByte = telemetry.status ?: snap.statusByte,
                 locked = telemetry.locked ?: snap.locked,
                 lightOn = telemetry.lightOn ?: snap.lightOn,
@@ -239,6 +247,21 @@ class ScooterService : Service(), ScooterTransport.Listener {
 
     // --- commandes -----------------------------------------------------------------------
 
+    private fun lockFrame(): ByteArray =
+        if (newProtocol) EtwowProtocol.lockNew() else EtwowProtocol.lock()
+
+    private fun unlockFrame(): ByteArray =
+        if (newProtocol) EtwowProtocol.unlockNew() else EtwowProtocol.unlock()
+
+    private fun lightFrame(on: Boolean): ByteArray = if (newProtocol) {
+        if (on) EtwowProtocol.lightOnNew() else EtwowProtocol.lightOffNew()
+    } else {
+        if (on) EtwowProtocol.lightOn() else EtwowProtocol.lightOff()
+    }
+
+    private fun modeFrame(mode: Int): ByteArray =
+        if (newProtocol) EtwowProtocol.setModeNew(mode) else EtwowProtocol.setMode(mode)
+
     private fun lock() {
         val snap = ScooterBus.state.value
         val speed = snap.speedKmh
@@ -246,20 +269,18 @@ class ScooterService : Service(), ScooterTransport.Listener {
             ScooterBus.log("verrouillage refusé : vitesse ${speed ?: "inconnue"}")
             return
         }
-        command(EtwowProtocol.lock(), "verrouillage") { it.locked == true }
+        command(lockFrame(), "verrouillage") { it.locked == true }
     }
 
     private fun manualLight(on: Boolean) {
         if (ScooterBus.state.value.connection != Connection.Connected) return
         lightOverride = true
         lightOverrideDesired = currentDesiredLight() ?: !on
-        command(if (on) EtwowProtocol.lightOn() else EtwowProtocol.lightOff(), "phare") {
-            it.lightOn == on
-        }
+        command(lightFrame(on), "phare") { it.lightOn == on }
     }
 
     private fun setMode(mode: Int) = command(
-        EtwowProtocol.setMode(mode),
+        modeFrame(mode),
         "limite ${SpeedModes.kmh(mode)} km/h",
     ) { it.mode == mode }
 
@@ -346,7 +367,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
         }
         if (snap.connection != Connection.Connected || snap.lightOn == null) return
         if (snap.lightOn == desired) return
-        command(if (desired) EtwowProtocol.lightOn() else EtwowProtocol.lightOff(), "phare auto") {
+        command(lightFrame(desired), "phare auto") {
             it.lightOn == desired
         }
     }

@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import com.etwow.data.Connection
+import com.etwow.protocol.EtwowProtocol
 import com.etwow.protocol.hex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,12 @@ class BleScooterTransport(
         val SERVICE_ETWOW: UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
         val SERVICE_GTSPORT: UUID = UUID.fromString("0000ff00-0000-1000-8000-00805f9b34fb")
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        /** Les appareils du nouveau protocole s'annoncent avec ces préfixes (app officielle). */
+        fun isScooterName(name: String): Boolean =
+            name.contains(NAME_ETWOW) ||
+                name.contains(NAME_GTSPORT) ||
+                EtwowProtocol.NEW_PROTOCOL_NAMES.any { name.startsWith(it) }
     }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -161,7 +168,7 @@ class BleScooterTransport(
             } catch (_: SecurityException) {
                 null
             }
-            if (name != null && !name.contains(NAME_ETWOW) && !name.contains(NAME_GTSPORT)) return
+            if (name != null && !isScooterName(name)) return
             stopScan()
             listener.onLog("BLE : trouvé ${name ?: device.address}")
             connect(device)
@@ -284,7 +291,8 @@ class BleScooterTransport(
             val service = g.getService(serviceUuid) ?: continue
             val chars = service.characteristics
             val read = chars.firstOrNull {
-                it.uuid.toString().startsWith("0000ffe1") || it.uuid.toString().startsWith("0000ff01")
+                val id = it.uuid.toString()
+                id.startsWith("0000ffe1") || id.startsWith("0000ff01") || id.startsWith("0000ff04")
             } ?: chars.firstOrNull {
                 it.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
             }

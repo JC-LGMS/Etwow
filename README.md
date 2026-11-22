@@ -10,6 +10,8 @@ connus.
 
 - **Connexion automatique** en Bluetooth Low Energy dès que la trottinette s'allume, via un
   service de premier plan (scan filtré par nom/service, reconnexion avec temporisation).
+- **Deux protocoles** : trames historiques `55 …` (E-TWOW / GTSport) et trames `AA 55 …` de
+  20 octets des modèles récents (BR2262e-s / TK / ET-WOW), détectées automatiquement.
 - **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (si le firmware l'envoie),
   odomètre total.
 - **Commandes** : verrouillage/déverrouillage (uniquement à l'arrêt), phare, choix de la limite de

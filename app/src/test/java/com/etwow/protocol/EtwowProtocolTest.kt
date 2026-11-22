@@ -1,6 +1,7 @@
 package com.etwow.protocol
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -89,5 +90,78 @@ class EtwowProtocolTest {
         assertTrue(SpeedModes.label(SpeedModes.L0_42).contains("42"))
         assertEquals(25, SpeedModes.kmh(SpeedModes.L3_25))
         assertNull(SpeedModes.kmh(7))
+    }
+
+    // --- nouveau protocole (trames de 20 octets) -------------------------------------
+
+    private fun newNotify(opcode: Int, fill: (IntArray) -> Unit): ByteArray {
+        val b = IntArray(20)
+        b[0] = 0xAA
+        b[1] = 0x55
+        b[2] = 0x00
+        b[3] = 0x0D
+        b[4] = opcode
+        fill(b)
+        var xor = 0
+        for (index in 0 until 18) xor = xor xor b[index]
+        b[18] = xor
+        b[19] = 0x0D
+        return ByteArray(20) { b[it].toByte() }
+    }
+
+    @Test
+    fun `commandes du nouveau protocole`() {
+        assertEquals(
+            "AA 55 00 0D 01 01 00 00 00 00 00 00 00 00 00 00 00 00 F2 0D",
+            EtwowProtocol.lockNew().hex(),
+        )
+        assertEquals(0xF0, EtwowProtocol.lightOnNew()[18].toInt() and 0xFF)
+        assertEquals(0xF9, EtwowProtocol.setModeNew(SpeedModes.L3_25)[18].toInt() and 0xFF)
+        assertEquals(0x08, EtwowProtocol.setModeNew(SpeedModes.L3_25)[4].toInt() and 0xFF)
+        assertEquals(0x03, EtwowProtocol.setModeNew(SpeedModes.L3_25)[5].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `notification 0B vitesse batterie verrou trip`() {
+        val frame = newNotify(0x0B) {
+            it[13] = 25
+            it[14] = 80
+            it[15] = 0x04
+            it[16] = 0xD2
+            it[17] = 0x01
+        }
+        assertTrue(EtwowProtocol.isNewFrame(frame))
+        val telemetry = EtwowProtocol.decode(frame)!!
+        assertEquals(25.0, telemetry.speedKmh!!, 0.0001)
+        assertEquals(80, telemetry.batteryPercent)
+        assertEquals(123.4, telemetry.tripKm!!, 0.0001)
+        assertEquals(true, telemetry.locked)
+    }
+
+    @Test
+    fun `notification 0C odometre phare et mode`() {
+        val frame = newNotify(0x0C) {
+            it[7] = 0x24
+            it[8] = 0x67
+            it[10] = 0x20
+            it[11] = 0x04
+        }
+        val telemetry = EtwowProtocol.decode(frame)!!
+        assertEquals(931.9, telemetry.odoKm!!, 0.0001)
+        assertEquals(true, telemetry.lightOn)
+        assertEquals(false, telemetry.locked)
+        assertEquals(SpeedModes.L2_20, telemetry.mode)
+    }
+
+    @Test
+    fun `nouvelle trame avec xor faux ignoree`() {
+        val frame = newNotify(0x0B) { it[13] = 25 }
+        frame[18] = (frame[18] + 1).toByte()
+        assertNull(EtwowProtocol.decode(frame))
+
+        // Une trame du protocole historique reste reconnue comme telle.
+        val old = bytes(1, 0, 0, 1)
+        assertFalse(EtwowProtocol.isNewFrame(old))
+        assertEquals(0.0, EtwowProtocol.decode(old)!!.speedKmh!!, 0.0001)
     }
 }

@@ -19,6 +19,9 @@ package com.etwow.protocol
 object EtwowProtocol {
     private const val START = 0x55
 
+    /** Préfixes des appareils « nouveau protocole » (application officielle, `newDevice`). */
+    val NEW_PROTOCOL_NAMES = listOf("BR2262e-s", "TK", "ET-WOW")
+
     fun frame(payload: IntArray): ByteArray {
         val all = intArrayOf(START) + payload
         val sum = all.sum() and 0xFF
@@ -33,7 +36,105 @@ object EtwowProtocol {
     fun lightOff(): ByteArray = frame(intArrayOf(0x06, 0x05, 0x00))
     fun setMode(mode: Int): ByteArray = frame(intArrayOf(0x02, 0x05, mode and 0x0F))
 
-    fun decode(notification: ByteArray): Telemetry? {
+    // --- nouveau protocole : AA 55 00 0D <opcode> <action> 00 ×12 <xor> 0D ---------------
+
+    fun newFrame(opcode: Int, action: Int): ByteArray {
+        val frame = ByteArray(20)
+        frame[0] = 0xAA.toByte()
+        frame[1] = 0x55
+        frame[2] = 0x00
+        frame[3] = 0x0D
+        frame[4] = opcode.toByte()
+        frame[5] = action.toByte()
+        var xor = 0
+        for (index in 0 until 18) xor = xor xor (frame[index].toInt() and 0xFF)
+        frame[18] = xor.toByte()
+        frame[19] = 0x0D
+        return frame
+    }
+
+    fun lockNew(): ByteArray = newFrame(0x01, 1)
+    fun unlockNew(): ByteArray = newFrame(0x01, 0)
+    fun lightOnNew(): ByteArray = newFrame(0x03, 1)
+    fun lightOffNew(): ByteArray = newFrame(0x03, 0)
+    fun setModeNew(mode: Int): ByteArray = newFrame(0x08, mode and 0x03)
+
+    /** Vrai si la trame est une notification du nouveau format, avec une somme XOR valide. */
+    fun isNewFrame(bytes: ByteArray): Boolean {
+        if (bytes.size != 20) return false
+        if ((bytes[0].toInt() and 0xFF) != 0xAA) return false
+        if ((bytes[1].toInt() and 0xFF) != 0x55) return false
+        var xor = 0
+        for (index in 0 until 18) xor = xor xor (bytes[index].toInt() and 0xFF)
+        return xor == (bytes[18].toInt() and 0xFF)
+    }
+
+    fun decode(notification: ByteArray): Telemetry? =
+        if (isNewFrame(notification)) decodeNew(notification) else decodeOld(notification)
+
+    private fun decodeNew(frame: ByteArray): Telemetry? {
+        fun u(index: Int) = frame[index].toInt() and 0xFF
+        return when (u(4)) {
+            // 0x0B : vitesse, batterie, verrou, trip.
+            0x0B -> {
+                val status = u(17)
+                Telemetry(
+                    type = 0x0B,
+                    speedKmh = u(13).toDouble(),
+                    batteryPercent = u(14).takeIf { it in 0..100 },
+                    status = syntheticStatus(
+                        locked = (status and 0x01) != 0,
+                        lightOn = null,
+                        zeroStart = null,
+                        mode = null,
+                    ),
+                    tripKm = ((u(15) shl 8) or u(16)) / 10.0,
+                )
+            }
+
+            // 0x0C : odomètre, phare, mode de conduite.
+            0x0C -> {
+                val flags = u(11)
+                val odo = (u(5) shl 24) or (u(6) shl 16) or (u(7) shl 8) or u(8)
+                Telemetry(
+                    type = 0x0C,
+                    status = syntheticStatus(
+                        locked = null,
+                        lightOn = (flags and 0x04) != 0,
+                        zeroStart = (flags and 0x80) != 0,
+                        mode = when {
+                            u(10) and 0x04 != 0 -> SpeedModes.L3_25
+                            u(10) and 0x08 != 0 -> SpeedModes.L0_42
+                            u(10) and 0x10 != 0 -> SpeedModes.L1_6
+                            u(10) and 0x20 != 0 -> SpeedModes.L2_20
+                            else -> null
+                        },
+                    ),
+                    odoKm = odo / 10.0,
+                )
+            }
+
+            else -> null
+        }
+    }
+
+    /** Les deux protocoles sont ramenés au même octet de statut : 0x80, 0x20, 0x10, mode. */
+    private fun syntheticStatus(
+        locked: Boolean?,
+        lightOn: Boolean?,
+        zeroStart: Boolean?,
+        mode: Int?,
+    ): Int? {
+        if (locked == null && lightOn == null && zeroStart == null && mode == null) return null
+        var status = 0
+        if (locked == true) status = status or 0x20
+        if (lightOn == true) status = status or 0x10
+        if (zeroStart == true) status = status or 0x80
+        if (mode != null) status = status or (mode and 0x07)
+        return status
+    }
+
+    private fun decodeOld(notification: ByteArray): Telemetry? {
         if (notification.size < 3) return null
         val type = notification[0].toInt() and 0xFF
         // Octets 1 et 2 : valeur sur 16 bits, poids faible d'abord.
@@ -56,6 +157,7 @@ data class Telemetry(
     val batteryPercent: Int? = null,
     val status: Int? = null,
     val odoKm: Double? = null,
+    val tripKm: Double? = null,
 ) {
     // Bits du statut, d'après le parseur officiel : 0x80 zero start, 0x20 verrou, 0x10 phare,
     // les trois bits de poids faible portent le cran de limite.
