@@ -142,7 +142,8 @@ d'envoyer quoi que ce soit. Écrire **avec réponse** sur Android.
 | Limite L2 = 20 km/h | `55 02 05 02 5E` |
 | Limite L3 = 25 km/h | `55 02 05 03 5F` |
 | Zero start on/off (hors périmètre) | `55 03 05 01 5E` / `55 03 05 00 5D` |
-| Init compteur (dangereux, ne pas envoyer) | `55 09 05 00 63` |
+| Init compteur (dangereux, ne pas envoyer) | `55 09 05 00 63` (trip) / `55 09 05 01 64` (odomètre) |
+| Change d'unité (km/miles, non utilisé) | `55 08 05 00` / `55 08 05 01` |
 
 ### Notifications
 
