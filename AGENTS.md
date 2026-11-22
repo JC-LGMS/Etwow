@@ -274,6 +274,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   « ← Retour » + `BackHandler`. `widget/` : `RemoteViews`.
   Attention : un état optionnel (`driveMode`, etc.) ne doit jamais servir d'index de liste —
   `LISTE[etat ?: -1]` a planté en 0.9 ; utiliser `getOrNull`.
+- Indicateur de défilement : **Compose Android n'en fournit pas** (`VerticalScrollbar` est une API
+  desktop). `ScrollIndicator` dans `MainScreen.kt` calcule la barre à partir de
+  `ScrollState.value` / `maxValue` et de la hauteur de la vue.
 
 ### Connexion automatique
 

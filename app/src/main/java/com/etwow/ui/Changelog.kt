@@ -12,6 +12,13 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.13",
+        date = "22/11/2026 23:43",
+        items = listOf(
+            "Indicateur de position vertical dans la fenêtre du journal et dans la liste des trames.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.12",
         date = "22/11/2026 23:36",
         items = listOf(

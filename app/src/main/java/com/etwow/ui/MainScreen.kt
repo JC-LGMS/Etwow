@@ -10,14 +10,19 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -47,10 +52,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -381,18 +388,27 @@ private fun InfoPage(onBack: () -> Unit) {
                 Text("Trames (${state.logs.size})", fontWeight = FontWeight.SemiBold)
                 TextButton(onClick = { copyLogs(context, state.logs) }) { Text("Copier") }
             }
+            val framesScroll = rememberScrollState()
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(320.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                    .verticalScroll(rememberScrollState())
-                    .padding(8.dp),
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)),
             ) {
                 Text(
                     if (state.logs.isEmpty()) "Aucune trame." else state.logs.joinToString("\n"),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(framesScroll)
+                        .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 14.dp),
+                )
+                ScrollIndicator(
+                    framesScroll,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
                 )
             }
         }
@@ -564,21 +580,65 @@ private fun ChangelogDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
         title = { Text("Journal des modifications") },
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                CHANGELOG.forEach { entry ->
-                    Text("v${entry.version} — ${entry.date}", fontWeight = FontWeight.SemiBold)
-                    entry.items.forEach { item -> Text("• $item", fontSize = 13.sp) }
+            val scroll = rememberScrollState()
+            Box(modifier = Modifier.heightIn(max = 360.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scroll)
+                        .padding(end = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CHANGELOG.forEach { entry ->
+                        Text("v${entry.version} — ${entry.date}", fontWeight = FontWeight.SemiBold)
+                        entry.items.forEach { item -> Text("• $item", fontSize = 13.sp) }
+                    }
                 }
+                ScrollIndicator(
+                    scroll,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
+                )
             }
         },
     )
 }
 
-private fun copyLogs(context: Context, logs: List<String>) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+/**
+ * Indicateur de position vertical (Compose Android n'en fournit pas) : barre fine dont la
+ * hauteur et la position suivent le défilement.
+ */
+@Composable
+private fun ScrollIndicator(state: ScrollState, modifier: Modifier = Modifier) {
+    if (state.maxValue <= 0) return
+    BoxWithConstraints(modifier.width(4.dp)) {
+        val density = LocalDensity.current
+        val viewport = constraints.maxHeight.toFloat()
+        val content = viewport + state.maxValue
+        val thumb = (viewport * viewport / content)
+            .coerceAtLeast(with(density) { 24.dp.toPx() })
+            .coerceAtMost(viewport)
+        val scrollable = viewport - thumb
+        val offset = if (state.maxValue > 0) {
+            state.value.toFloat() / state.maxValue * scrollable
+        } else {
+            0f
+        }
+        Box(
+            Modifier
+                .offset { IntOffset(0, offset.toInt()) }
+                .fillMaxWidth()
+                .height(with(density) { thumb.toDp() })
+                .background(
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    RoundedCornerShape(2.dp),
+                ),
+        )
+    }
+}
+
+private fun copyLogs(context: Context, logs: List<String>) {    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("Etwow", logs.joinToString("\n")))
 }
 
