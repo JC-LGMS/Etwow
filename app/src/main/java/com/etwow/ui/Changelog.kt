@@ -12,6 +12,15 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.11",
+        date = "22/11/2026 23:26",
+        items = listOf(
+            "Tableau de bord : valeurs et libellés alignés en deux colonnes.",
+            "Le mode de conduite n'apparaît que si la trottinette le transmet.",
+            "Zero start : précision « Démarrer au pied pour que la trottinette accélère ».",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.10",
         date = "22/11/2026 23:15",
         items = listOf(

@@ -209,7 +209,14 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Zero start")
+                Column {
+                    Text("Zero start")
+                    Text(
+                        "Démarrer au pied pour que la trottinette accélère",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Switch(
                     checked = state.zeroStart == true,
                     enabled = connected,
@@ -219,8 +226,9 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                 )
             }
 
-            if (state.newProtocol) {
-                val driveLabel = state.driveMode?.let { DRIVE_MODES.getOrNull(it) } ?: "—"
+            // Uniquement si la machine transmet réellement un mode de conduite (nouveau protocole).
+            if (state.driveMode != null) {
+                val driveLabel = DRIVE_MODES.getOrNull(state.driveMode!!) ?: "—"
                 Text("Mode de conduite : $driveLabel")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DRIVE_MODES.forEachIndexed { index, label ->
@@ -522,7 +530,14 @@ private fun Metric(label: String, value: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        // Largeur fixe : les trois valeurs et les trois libellés sont alignés en colonnes.
+        Text(
+            value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(104.dp),
+        )
         Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
