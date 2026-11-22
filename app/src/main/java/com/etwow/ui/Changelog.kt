@@ -12,6 +12,15 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.5",
+        date = "22/11/2026 19:12",
+        items = listOf(
+            "Notifications décodées d'après les trames réelles d'une GTS : la somme de contrôle finale n'est plus prise pour une donnée.",
+            "Batterie, trip (en mètres) et odomètre (en chiffres décimaux) affichés selon le format réel.",
+            "Simulateur aligné sur les trames réelles, checksums compris.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.4",
         date = "22/11/2026 01:38",
         items = listOf(

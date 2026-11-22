@@ -25,7 +25,7 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
     private var light = false
     private var mode = SpeedModes.L2_20
     private var battery = 82
-    private var trip = 0
+    private var tripMeters = 12_500
     private var odo = 1240
     private var speed = 0
 
@@ -36,7 +36,7 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
             delay(700)
             listener.onConnection(Connection.Connected, "E-TWOW SIM", "SIM-00:11:22:33:44:55")
             emit(statusFrame())
-            emit(byteArrayOf(2, battery.toByte()))
+            emit(batteryFrame())
             emit(speedFrame())
             emit(tripFrame())
             emit(odoFrame())
@@ -52,15 +52,15 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
                     phase < 20 -> 0
                     else -> ((phase - 19) * 3).coerceAtMost(25)
                 }
-                if (tick % 5 == 0) trip += 1
-                if (tick % 5 == 0) odo += 1
+                if (tick % 5 == 0) tripMeters += 10
+                if (tick % 150 == 0) odo += 1
                 if (tick % 30 == 0 && battery > 0) battery -= 1
                 emit(speedFrame())
                 if (tick % 5 == 0) {
                     emit(tripFrame())
                     emit(odoFrame())
                 }
-                if (tick % 30 == 0) emit(byteArrayOf(2, battery.toByte()))
+                if (tick % 30 == 0) emit(batteryFrame())
             }
         }
     }
@@ -88,24 +88,30 @@ class SimulatedScooterTransport(private val listener: ScooterTransport.Listener)
         }
     }
 
-    private fun statusFrame(): ByteArray = byteArrayOf(
+    /** Notification réelle : type, données, puis somme de contrôle des octets précédents. */
+    private fun notify(vararg values: Int): ByteArray {
+        val sum = values.sum() and 0xFF
+        return ByteArray(values.size + 1) { index ->
+            if (index < values.size) values[index].toByte() else sum.toByte()
+        }
+    }
+
+    private fun statusFrame(): ByteArray = notify(
         3,
-        (0x40 or (if (light) 0x10 else 0) or (if (locked) 0x20 else 0) or mode).toByte(),
+        (if (light) 0x10 else 0) or (if (locked) 0x20 else 0) or mode,
+        0,
     )
 
-    private fun speedFrame(): ByteArray = byteArrayOf(1, (speed and 0xFF).toByte(), 0)
+    private fun batteryFrame(): ByteArray = notify(2, battery, 0)
 
-    private fun tripFrame(): ByteArray =
-        byteArrayOf(4, ((trip shr 8) and 0xFF).toByte(), (trip and 0xFF).toByte())
+    private fun speedFrame(): ByteArray = notify(1, speed and 0xFF, 0)
 
-    private fun odoFrame(): ByteArray = byteArrayOf(
-        5,
-        0,
-        0,
-        ((odo shr 16) and 0xFF).toByte(),
-        ((odo shr 8) and 0xFF).toByte(),
-        (odo and 0xFF).toByte(),
-    )
+    private fun tripFrame(): ByteArray = notify(4, (tripMeters shr 8) and 0xFF, tripMeters and 0xFF)
+
+    private fun odoFrame(): ByteArray {
+        val digits = "%04d".format(odo % 10_000)
+        return notify(5, digits[0].code, digits[1].code, digits[2].code, digits[3].code)
+    }
 
     private fun emit(bytes: ByteArray) {
         // Le journal brut est écrit une seule fois, par ScooterService.

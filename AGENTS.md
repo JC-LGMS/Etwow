@@ -157,11 +157,27 @@ d'indexer : une trame tronquée ne doit jamais planter le service.
 | 4 | `[4, hi, lo]` | trip ; le code public fait `hi + lo`, **faux au-delà de 255** |
 | 5 | `[5, ?, ?, b2, b1, b0]` | odomètre ; le code public additionne `b2+b1+b0`, **faux au-delà de 255** |
 
-**À ce jour (22/11/2026) la vitesse est juste sur la machine réelle ; batterie, trip et odomètre
-ne correspondent pas à l'afficheur.** L'unité et l'ordre des octets restent donc à déterminer :
-ouvrir *Informations techniques*, relever les lignes « Trame batterie / trip / odo » et les
-comparer aux valeurs affichées par la trottinette, puis corriger `EtwowProtocol.decode` et figer
-un test avec la trame réelle. Ne pas ajuster au hasard.
+### Notifications (relevées sur une GTS le 22/11/2026)
+
+Chaque notification se termine par une **somme de contrôle** : somme des octets précédents,
+tronquée à 8 bits. Vérifié : `01 00 00 | 01`, `02 64 00 | 66`, `03 10 00 | 13`, `04 67 24 | 8F`.
+Le type 5 de cette machine ne la respecte pas (`05 31 32 33 34 | 9D` : la somme vaudrait `CF`) :
+le codec ne retire le dernier octet que si la somme tombe juste, sinon tout reste donnée.
+
+| Type | Trame réelle | Interprétation retenue |
+|---|---|---|
+| 1 | `01 00 00 01` | vitesse = premier octet (+255 si le suivant vaut 1) |
+| 2 | `02 64 00 66` | batterie en % = premier octet (0x64 = 100) |
+| 3 | `03 10 00 13` | statut : quartet haut = phare 0x1 / verrou 0x2 / zero start 0x8, quartet bas = mode |
+| 4 | `04 67 24 8F` | trip en **mètres** sur 16 bits grand-boutiste (0x6724 = 26,4 km) |
+| 5 | `05 31 32 33 34 9D` | odomètre en **chiffres décimaux** (0x31..0x34 = « 1234 » km) |
+
+Le bit 0x40 du quartet haut n'apparaît pas sur cette machine (statut `0x00` au repos, `0x10` phare
+allumé) : ne pas s'en servir comme marqueur. Le type 5 est le seul dont la somme de contrôle est
+fausse ; le décodage accepte donc les deux formes.
+
+**Reste à confirmer sur la machine** : que l'afficheur de la trottinette montre bien 100 %, 26,4 km
+et 1234 km pour ces trames (les unités mètres/chiffres sont déduites, pas encore validées à l'œil).
 
 Statut (octet 1 du type 3) : quartet haut = `0x4 | phare(0x1) | verrou(0x2) | zeroStart(0x8)`,
 quartet bas = mode de limite (0..3). Exemples : `0x5` = phare seul, `0x6` = verrou seul,

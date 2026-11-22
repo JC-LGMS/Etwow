@@ -155,7 +155,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Metric("Batterie", state.batteryPercent?.let { "$it %" } ?: "—")
-                    Metric("Depuis l'allumage", state.tripKm?.let { "$it km" } ?: "—")
+                    Metric("Depuis l'allumage", state.tripKm?.let { "%.1f km".format(it) } ?: "—")
                     Metric("Odomètre", state.odoKm?.let { "$it km" } ?: "—")
                 }
             }

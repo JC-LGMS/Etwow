@@ -12,7 +12,7 @@ data class ScooterSnapshot(
     val deviceAddress: String? = null,
     val speedKmh: Int? = null,
     val batteryPercent: Int? = null,
-    val tripKm: Int? = null,
+    val tripKm: Double? = null,
     val odoKm: Int? = null,
     val locked: Boolean? = null,
     val lightOn: Boolean? = null,

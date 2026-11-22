@@ -27,6 +27,24 @@ class EtwowProtocolTest {
         assertEquals("55 FF 05 FF 58", EtwowProtocol.frame(intArrayOf(0xFF, 0x05, 0xFF)).hex())
     }
 
+    /** Trames relevées sur une GTS réelle le 22/11/2026. */
+    @Test
+    fun `trames reelles de la GTS`() {
+        val status = EtwowProtocol.decode(bytes(3, 0x10, 0x00, 0x13))!!
+        assertEquals(true, status.lightOn)
+        assertEquals(false, status.locked)
+        assertEquals(SpeedModes.L0_42, status.mode)
+
+        assertEquals(100, EtwowProtocol.decode(bytes(2, 0x64, 0x00, 0x66))!!.batteryPercent)
+        assertEquals(0, EtwowProtocol.decode(bytes(1, 0x00, 0x00, 0x01))!!.speedKmh)
+
+        val trip = EtwowProtocol.decode(bytes(4, 0x67, 0x24, 0x8F))!!.tripKm!!
+        assertEquals(26.404, trip, 0.0001)
+
+        // Type 5 : la somme de contrôle annoncée ne tombe pas juste, tout le corps est gardé.
+        assertEquals(1234, EtwowProtocol.decode(bytes(5, 0x31, 0x32, 0x33, 0x34, 0x9D))!!.odoKm)
+    }
+
     @Test
     fun `notification de vitesse`() {
         val telemetry = EtwowProtocol.decode(bytes(1, 17, 0))
@@ -55,8 +73,9 @@ class EtwowProtocolTest {
     }
 
     @Test
-    fun `trip et odometre grand-boutistes`() {
-        assertEquals(300, EtwowProtocol.decode(bytes(4, 0x01, 0x2C))?.tripKm)
+    fun `trip en metres et odometre en chiffres`() {
+        // 0x012C = 300 m = 0,3 km
+        assertEquals(0.3, EtwowProtocol.decode(bytes(4, 0x01, 0x2C))?.tripKm!!, 0.0001)
         assertEquals(70_000, EtwowProtocol.decode(bytes(5, 0, 0, 0x01, 0x11, 0x70))?.odoKm)
     }
 
