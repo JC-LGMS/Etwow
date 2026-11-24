@@ -13,7 +13,10 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelUuid
@@ -76,16 +79,62 @@ class BleScooterTransport(
 
     override fun start() {
         retryDelay = 1_000L
+        registerBluetoothState()
         scan()
     }
 
     override fun stop() {
         retryJob?.cancel()
         retryJob = null
+        unregisterBluetoothState()
         stopScan()
         closeGatt()
         scope.cancel()
         listener.onConnection(Connection.Idle, null, null)
+    }
+
+    /**
+     * Le Bluetooth du téléphone peut être éteint au démarrage du service (au boot, l'adaptateur
+     * n'est pas encore prêt) ou rallumé plus tard : sans ça, le service restait hors ligne.
+     */
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                BluetoothAdapter.STATE_ON -> {
+                    retryDelay = 1_000L
+                    retryJob?.cancel()
+                    scan()
+                }
+
+                BluetoothAdapter.STATE_OFF -> {
+                    stopScan()
+                    listener.onConnection(Connection.Offline, null, null)
+                    listener.onLog("BLE : Bluetooth désactivé")
+                }
+            }
+        }
+    }
+
+    private var stateRegistered = false
+
+    private fun registerBluetoothState() {
+        if (stateRegistered) return
+        ContextCompat.registerReceiver(
+            context,
+            bluetoothStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        stateRegistered = true
+    }
+
+    private fun unregisterBluetoothState() {
+        if (!stateRegistered) return
+        stateRegistered = false
+        try {
+            context.unregisterReceiver(bluetoothStateReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
     }
 
     override fun write(frame: ByteArray) {
@@ -114,6 +163,7 @@ class BleScooterTransport(
         if (adapter == null) {
             listener.onConnection(Connection.Offline, null, null)
             listener.onLog("BLE : adaptateur absent")
+            scheduleRetry()
             return
         }
         if (!hasScanPermission()) {
@@ -122,6 +172,7 @@ class BleScooterTransport(
             return
         }
         if (!adapter.isEnabled) {
+            // Pas de nouvelle tentative ici : le récepteur relance le scan sur STATE_ON.
             listener.onConnection(Connection.Offline, null, null)
             listener.onLog("BLE : Bluetooth désactivé")
             return

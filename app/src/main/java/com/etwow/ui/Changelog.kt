@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.16",
+        date = "24/11/2026 18:48",
+        items = listOf(
+            "Connexion en arrière-plan : la recherche reprend dès que le Bluetooth du téléphone est rallumé.",
+            "Si le Bluetooth n'est pas encore prêt au démarrage du téléphone, la recherche réessaie au lieu d'abandonner.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.15",
         date = "23/11/2026 00:07",
         items = listOf(

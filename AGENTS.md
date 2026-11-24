@@ -298,6 +298,17 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   en batterie « sans restriction » ; ne pas forcer `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
 - Écouter `BluetoothAdapter.ACTION_STATE_CHANGED` pour reprendre quand le Bluetooth est rallumé.
   Sur API 26–30, le scan BLE exige aussi la localisation activée.
+  **Fait** (`BleScooterTransport`) : récepteur enregistré au `start()` ; un scan est relancé
+  immédiatement sur `STATE_ON`. Et `scan()` **replanifie** un essai quand l'adaptateur est absent
+  (au boot, le service démarre avant que la pile Bluetooth soit prête) : avant, il abandonnait en
+  silence, et ça donnait « l'app ne se connecte pas quand elle n'est pas lancée ». Quand
+  l'adaptateur existe mais est éteint, on ne réessaie **pas** : le récepteur s'en charge, sinon le
+  journal technique se remplissait d'une ligne « Bluetooth désactivé » toutes les 30 s.
+- **Mise à jour de l'application** : `ACTION_MY_PACKAGE_REPLACED` **n'est pas** une exemption aux
+  restrictions de démarrage de FGS (Android 12+) — vérifié sur API 37, `startForegroundService`
+  est refusé (`ForegroundServiceStartNotAllowedException`, crash du receiver). Ne pas l'ajouter :
+  après une mise à jour, le service ne repart qu'à l'ouverture de l'application ou au reboot.
+  `BOOT_COMPLETED` et le redémarrage `START_STICKY` sont bien autorisés (vérifiés).
 
 ### Permissions (manifeste)
 
