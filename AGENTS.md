@@ -341,6 +341,13 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 
 - Widget **1×1** : le logo et un **point** — **vert** à 25 km/h, **rouge** sinon, **gris** hors
   ligne. Pas de texte, pas de bouton.
+- **Le fond ne remplit pas la cellule** : racine transparente + boîte fixe de 56 dp centrée
+  (`widget_root`, logo 36 dp, point 14 dp), sinon le widget prenait toute la cellule du lanceur.
+  C'est la seule façon de « réduire » un widget `targetCellWidth/Height = 1` ; `minWidth` reste
+  40 dp pour ne pas réclamer deux cellules sur les anciens lanceurs.
+- Icône de l'application et logo du widget : la **même trottinette** vectorielle, chemins dupliqués
+  dans `ic_launcher.xml` (avec le fond) et `ic_widget_logo.xml` (sans). L'icône de notification
+  reste l'éclair : 24 dp monochrome, une trottinette y serait illisible.
 - `updatePeriodMillis = 0` : le widget est mis à jour par le service à chaque changement d'état,
   pas par un réveil périodique.
 - Clic → `PendingIntent.getForegroundService` avec l'action `SET_25` ; le widget ne fait jamais de

@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.17",
+        date = "26/11/2026 23:42",
+        items = listOf(
+            "Icône de l'application : une trottinette à la place de l'éclair (le logo du widget suit).",
+            "Widget 1×1 plus petit : carré de 56 dp centré dans la cellule, au lieu de remplir la cellule.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.16",
         date = "24/11/2026 18:48",
         items = listOf(

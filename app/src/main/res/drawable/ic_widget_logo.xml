@@ -4,7 +4,30 @@
     android:height="44dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Même trottinette que l'icône de l'application, sans le fond. -->
     <path
-        android:fillColor="#7CD4FD"
-        android:pathData="M62,14L34,62h16l-6,32 32,-48H58z" />
+        android:pathData="M19,76A9,9 0 1,1 37,76A9,9 0 1,1 19,76Z"
+        android:strokeColor="#7CD4FD"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M73,76A9,9 0 1,1 91,76A9,9 0 1,1 73,76Z"
+        android:strokeColor="#7CD4FD"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M36,70L70,70"
+        android:strokeColor="#7CD4FD"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M77,68L66,28"
+        android:strokeColor="#7CD4FD"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M56,28L76,28"
+        android:strokeColor="#7CD4FD"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
 </vector>
