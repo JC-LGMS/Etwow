@@ -12,6 +12,14 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.18",
+        date = "26/11/2026 23:49",
+        items = listOf(
+            "Icône de notification : trottinette simplifiée au lieu de l'éclair (barre d'état).",
+            "Le volet des notifications affiche l'icône de l'application : après une mise à jour, il peut garder l'ancienne jusqu'au redémarrage du téléphone.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.17",
         date = "26/11/2026 23:42",
         items = listOf(

@@ -347,7 +347,12 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   40 dp pour ne pas réclamer deux cellules sur les anciens lanceurs.
 - Icône de l'application et logo du widget : la **même trottinette** vectorielle, chemins dupliqués
   dans `ic_launcher.xml` (avec le fond) et `ic_widget_logo.xml` (sans). L'icône de notification
-  reste l'éclair : 24 dp monochrome, une trottinette y serait illisible.
+  (`ic_notification.xml`) est la même trottinette simplifiée pour 24 dp : roues **pleines** et
+  traits épais, sinon les détails disparaissent.
+- **L'icône du volet des notifications est celle de l'application**, pas `ic_notification` : c'est
+  `ic_notification` qui va dans la barre d'état (masquée quand la notification est silencieuse).
+  Conséquence vérifiée sur API 37 : après une mise à jour, le volet continue d'afficher l'ancienne
+  icône (cache de SystemUI) **jusqu'au redémarrage** ; ne pas conclure à un bug de ressource.
 - `updatePeriodMillis = 0` : le widget est mis à jour par le service à chaque changement d'état,
   pas par un réveil périodique.
 - Clic → `PendingIntent.getForegroundService` avec l'action `SET_25` ; le widget ne fait jamais de
