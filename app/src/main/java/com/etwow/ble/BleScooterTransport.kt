@@ -181,19 +181,19 @@ class BleScooterTransport(
             listener.onLog("BLE : Bluetooth désactivé")
             return
         }
-        if (scanning) return
-
+        synchronized(lock) {
+            if (scanning) return
+            scanning = true
+        }
         listener.onConnection(Connection.Connecting, null, null)
-        scanning = true
         // Sans filtre de service : un modèle récent peut n'annoncer que son nom. On trie dans le
         // callback. Rapide 30 s, puis économique.
         startScan(ScanSettings.SCAN_MODE_LOW_LATENCY)
         scanModeJob?.cancel()
         scanModeJob = scope.launch {
             delay(SCAN_FAST_MS)
-            if (!scanning) return@launch
-            stopScan()
-            scanning = true
+            if (!stopScan()) return@launch
+            synchronized(lock) { scanning = true }
             startScan(ScanSettings.SCAN_MODE_LOW_POWER)
         }
     }
@@ -202,25 +202,29 @@ class BleScooterTransport(
         try {
             adapter?.bluetoothLeScanner
                 ?.startScan(null, ScanSettings.Builder().setScanMode(mode).build(), scanCallback)
-                ?: run {
-                    scanning = false
-                    listener.onConnection(Connection.Offline, null, null)
-                    listener.onLog("BLE : scanner indisponible")
-                }
+                ?: failScan("scanner indisponible")
         } catch (e: SecurityException) {
-            scanning = false
-            listener.onConnection(Connection.Offline, null, null)
-            listener.onLog("BLE : scan refusé (${e.message})")
+            failScan("scan refusé (${e.message})")
         }
     }
 
-    private fun stopScan() {
-        if (!scanning) return
-        scanning = false
+    private fun failScan(reason: String) {
+        synchronized(lock) { scanning = false }
+        listener.onConnection(Connection.Offline, null, null)
+        listener.onLog("BLE : $reason")
+        scheduleRetry()
+    }
+
+    private fun stopScan(): Boolean {
+        synchronized(lock) {
+            if (!scanning) return false
+            scanning = false
+        }
         try {
             adapter?.bluetoothLeScanner?.stopScan(scanCallback)
         } catch (_: SecurityException) {
         }
+        return true
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -239,10 +243,7 @@ class BleScooterTransport(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            scanning = false
-            listener.onConnection(Connection.Offline, null, null)
-            listener.onLog("BLE : échec du scan ($errorCode)")
-            scheduleRetry()
+            failScan("échec du scan ($errorCode)")
         }
     }
 
@@ -255,11 +256,14 @@ class BleScooterTransport(
 
     private fun connect(device: BluetoothDevice) {
         closeGatt()
-        synchronized(lock) {
+        val dropped = synchronized(lock) {
+            val count = queue.size
             writeChar = null
             queue.clear()
             opBusy = false
+            count
         }
+        if (dropped > 0) listener.onLog("BLE : $dropped opération(s) abandonnée(s)")
         try {
             val g = if (Build.VERSION.SDK_INT >= 26) {
                 device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
@@ -475,7 +479,10 @@ class BleScooterTransport(
     }
 
     private fun closeGatt() {
-        val g = synchronized(lock) { gatt.also { gatt = null } }
+        val g = synchronized(lock) {
+            writeChar = null
+            gatt.also { gatt = null }
+        }
         try {
             g?.disconnect()
             g?.close()

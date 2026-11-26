@@ -234,7 +234,15 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 - Le nouveau protocole **transmet le trip** : dans ce cas l'application l'affiche tel quel, sans
   cumul d'écarts (le cumul reste le repli pour l'ancien protocole). Piège : les trames `0C`
   (odomètre seul) ne doivent **pas** déclencher le cumul, sinon elles écrasent le trip transmis une
-  fois par seconde et polluent `savedTrip`.
+  fois par seconde et polluent `savedTrip`. Le trip est persisté à la déconnexion **et au plus une
+  fois par minute** : une mort du processus ne coûte pas plus d'une minute de trajet.
+- **Bits inconnus** : chaque trame ne porte qu'une partie de l'état. `Telemetry.statusMask` dit
+  quels bits sont réellement transmis ; un bit absent reste `null`, jamais `false`. Sans ce masque,
+  `0B` (verrou) effaçait le phare et `0C` (phare) effaçait le verrou, et le phare auto renvoyait
+  une commande à chaque trame `0B`.
+- La limite de vitesse est une valeur **locale** pour le nouveau protocole (aucune trame ne la
+  renvoie) : ne pas l'effacer à la déconnexion, sinon le widget repasse au rouge après chaque
+  coupure alors que la trottinette a gardé la limite.
 - Implémentation : `EtwowProtocol.newFrame/lockNew/lightOnNew/setModeNew`, `isNewFrame` (signature +
   XOR), `decodeNew` (les deux trames sont ramenées à l'octet de statut commun 0x80/0x20/0x10/mode).
   `ScooterService` bascule sur le nouveau format dès que le nom de l'appareil ou la première trame
@@ -251,6 +259,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 - **Les notifications sont la vérité**, pas la réponse d'écriture : une écriture réussie ne prouve
   pas que la trottinette a appliqué l'ordre. Mettre à jour l'UI et le widget seulement après la
   notification correspondante (ou afficher « en attente »).
+- **Une écriture refusée n'applique rien localement.** Limite et mode de conduite du nouveau
+  protocole sont des valeurs locales : `writeOnly` rend un booléen, l'état n'est mis à jour qu'après
+  une écriture acceptée, sinon l'écran affiche un réglage que la trottinette n'a jamais reçu.
 - **Mode 0 = 42 km/h** : usage privé. L'application ne le sélectionne jamais par défaut. La limite
   légale française est 25 km/h. La phrase d'avertissement sous les boutons a été retirée sur
   demande de l'utilisateur le 22/11/2026 : le libellé « 42 km/h (privé) » suffit, ne pas la
@@ -304,7 +315,11 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 - Une seule instance GATT, une seule opération à la fois (file + verrou + timeout). Android refuse
   une écriture pendant une lecture ou une écriture de descripteur. Le verrou est obligatoire :
   `write()` vient du thread principal et les callbacks GATT d'un autre, un `ArrayDeque` nu perdait
-  des commandes (voire se corrompait).
+  des commandes (voire se corrompait). `closeGatt()` remet `writeChar` à `null` et le reconnect
+  compte dans le journal les opérations abandonnées, sinon une commande disparaissait sans trace.
+- Le démarrage du scan est protégé par le même verrou : le récepteur `STATE_ON` et la temporisation
+  peuvent appeler `scan()` en même temps. Un échec de `startScan` (scanner absent ou refusé)
+  replanifie, comme les impasses GATT.
 - Trois impasses à ne pas rouvrir : `connectGatt` qui rend `null`, CCCD absent, écriture de
   descripteur refusée. Sans `Offline` + `scheduleRetry()`, l'écran restait sur « Connexion… » à vie.
 - `onConnectionStateChange` → `close()` systématique avant de recréer ; sinon les ressources
@@ -487,8 +502,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   et du phare auto) a un **test unitaire JUnit 4** dans `app/src/test/`, lancé par
   `:app:testDebugUnitTest`.
 - Tests minimum : trames de commande exactes, notification tronquée/type inconnu/somme fausse sans
-  crash, statut verrou/phare/mode, bascule 25 ↔ mode précédent, lever/coucher connus (Paris,
-  solstices) et cas polaire, hystérésis du phare, override manuel (`AutoLight.shouldCommand`).
+  crash, statut verrou/phare/mode, bits inconnus laissés `null` (jamais `false`), bascule 25 ↔ mode
+  précédent, lever/coucher connus (Paris, solstices) et cas polaire, hystérésis du phare, override
+  manuel (`AutoLight.shouldCommand`).
 - Trip/odomètre : un test avec une trame réelle dès que l'ordre des octets est confirmé.
 - Le reste se vérifie **à l'écran** (pas d'`androidTest` par défaut).
 

@@ -98,8 +98,9 @@ class ScooterService : Service(), ScooterTransport.Listener {
     // officielle. lastOdoKm repart à zéro à chaque connexion pour ne pas compter le trajet hors ligne.
     private var lastOdoKm: Double? = null
 
-    // Trip en mémoire : écrit en préférences à la déconnexion, pas à chaque trame d'odomètre.
+    // Trip en mémoire : écrit en préférences à la déconnexion et au plus une fois par minute.
     private var savedTripKm = 0.0
+    private var tripPersistedAt = 0L
 
     // Position : rafraîchie au plus une fois par minute, sinon mémorisée.
     private var positionAt = 0L
@@ -230,13 +231,17 @@ class ScooterService : Service(), ScooterTransport.Listener {
                 lightOn = null,
                 zeroStart = null,
                 driveMode = null,
-                mode = null,
                 pending = null,
             )
         }
     }
 
+    // Les callbacks BLE arrivent sur un thread Binder : tout le service reste sur le principal.
     override fun onConnection(state: Connection, name: String?, address: String?) {
+        scope.launch { handleConnection(state, name, address) }
+    }
+
+    private fun handleConnection(state: Connection, name: String?, address: String?) {
         if (state != Connection.Connected) {
             // Valeurs de la trottinette précédente : les effacer, sinon l'UI les présente comme
             // actuelles alors que la liaison est perdue. Le trip persisté reste.
@@ -268,6 +273,10 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onNotification(bytes: ByteArray) {
+        scope.launch { handleNotification(bytes) }
+    }
+
+    private fun handleNotification(bytes: ByteArray) {
         val telemetry = EtwowProtocol.decode(bytes)
         if (telemetry == null) {
             ScooterBus.log("← ${bytes.hex()} (ignorée)")
@@ -301,8 +310,10 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onLog(line: String) {
-        ScooterBus.log(line)
-        render()
+        scope.launch {
+            ScooterBus.log(line)
+            render()
+        }
     }
 
     /** Trip = somme des écarts d'odomètre, persistée ; voir [TripMeter]. */
@@ -310,10 +321,16 @@ class ScooterService : Service(), ScooterTransport.Listener {
         val previous = lastOdoKm
         lastOdoKm = odo
         savedTripKm = TripMeter.next(savedTripKm, previous, odo)
+        // Une mort du processus ne doit pas coûter plus d'une minute de trajet.
+        val now = SystemClock.elapsedRealtime()
+        if (now - tripPersistedAt >= 60_000) {
+            tripPersistedAt = now
+            persistTrip()
+        }
         return savedTripKm
     }
 
-    /** Écrit le trip en préférences : à la déconnexion, pas à chaque trame. */
+    /** Écrit le trip en préférences : déconnexion, destruction et au plus une fois par minute. */
     private fun persistTrip() {
         if (settings.savedTripKm != savedTripKm) settings.savedTripKm = savedTripKm
     }
@@ -345,14 +362,15 @@ class ScooterService : Service(), ScooterTransport.Listener {
     private fun hornFrame(): ByteArray =
         if (newProtocol) EtwowProtocol.hornNew() else EtwowProtocol.horn()
 
-    private fun writeOnly(frame: ByteArray, label: String) {
+    private fun writeOnly(frame: ByteArray, label: String): Boolean {
         val link = transport
         if (link == null || ScooterBus.state.value.connection != Connection.Connected) {
             ScooterBus.log("$label impossible : non connecté")
-            return
+            return false
         }
         link.write(frame)
         ScooterBus.log("$label envoyé")
+        return true
     }
 
     private fun lock() {
@@ -375,8 +393,9 @@ class ScooterService : Service(), ScooterTransport.Listener {
     private fun setMode(mode: Int) {
         // Le nouveau protocole ne renvoie pas la limite : on l'applique localement après écriture.
         if (newProtocol) {
-            writeOnly(modeFrame(mode), "limite ${SpeedModes.kmh(mode)} km/h")
-            ScooterBus.update { it.copy(mode = mode) }
+            if (writeOnly(modeFrame(mode), "limite ${SpeedModes.kmh(mode)} km/h")) {
+                ScooterBus.update { it.copy(mode = mode) }
+            }
             return
         }
         command(modeFrame(mode), "limite ${SpeedModes.kmh(mode)} km/h") { it.mode == mode }
@@ -388,21 +407,23 @@ class ScooterService : Service(), ScooterTransport.Listener {
             ScooterBus.log("mode de conduite : réservé au nouveau protocole")
             return
         }
-        writeOnly(EtwowProtocol.driveModeNew(mode), "mode de conduite")
-        ScooterBus.update { it.copy(driveMode = mode) }
+        if (writeOnly(EtwowProtocol.driveModeNew(mode), "mode de conduite")) {
+            ScooterBus.update { it.copy(driveMode = mode) }
+        }
     }
 
     private fun resetTrip() {
-        writeOnly(
+        val sent = writeOnly(
             if (newProtocol) EtwowProtocol.resetTripNew() else EtwowProtocol.resetTrip(),
             "remise à zéro du trip",
         )
+        if (!sent) return
         settings.savedTripKm = 0.0
         savedTripKm = 0.0
         ScooterBus.update { it.copy(tripKm = 0.0) }
     }
 
-    /** Le widget ne fait qu'une chose : passer à 25 km/h, même s'il est déjà à 25. */
+    /** Le widget ne fait qu'une chose : passer à 25 km/h. Réappuyer ne change rien. */
     private fun set25() {
         val snap = ScooterBus.state.value
         if (snap.connection != Connection.Connected) {

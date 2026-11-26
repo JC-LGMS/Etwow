@@ -376,9 +376,9 @@ private fun InfoPage(onBack: () -> Unit) {
         CardBox {
             InfoLine("Nom", state.deviceName ?: "—")
             InfoLine("Statut", state.statusByte?.let { "0x%02X".format(it) } ?: "—")
-            InfoLine("Mode", state.mode?.toString() ?: "—")
-            InfoLine("Verrou", state.locked?.toString() ?: "—")
-            InfoLine("Phare", state.lightOn?.toString() ?: "—")
+            InfoLine("Mode", state.mode?.let { SpeedModes.label(it) } ?: "—")
+            InfoLine("Verrou", yesNo(state.locked))
+            InfoLine("Phare", yesNo(state.lightOn))
             InfoLine("Adresse", state.deviceAddress ?: "—")
             // Permet de comparer avec l'afficheur de la trottinette quand un décodage est faux.
             InfoLine("Trame batterie", lastFrame(state.logs, 2))
@@ -673,3 +673,9 @@ private fun bluetoothAllowed(context: Context): Boolean =
 /** Dernière trame reçue de ce type, telle quelle : « ← 04 00 12 ». */
 private fun lastFrame(logs: List<String>, type: Int): String =
     logs.lastOrNull { it.contains("← 0$type ") } ?: "—"
+
+private fun yesNo(value: Boolean?): String = when (value) {
+    true -> "oui"
+    false -> "non"
+    null -> "—"
+}

@@ -12,6 +12,19 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.20",
+        date = "27/11/2026 00:32",
+        items = listOf(
+            "Audit complet n°2 : les 15 points sont corrigés.",
+            "Trames de 20 octets : un bit absent reste inconnu au lieu d'être lu comme faux. Plus de commande de phare renvoyée chaque seconde, et verrou/phare ne clignotent plus.",
+            "Service : callbacks Bluetooth traités sur le thread principal, trip enregistré au plus une fois par minute, limite de vitesse conservée à la reconnexion.",
+            "Recherche : plus de double scan, un échec de démarrage réessaie, une commande abandonnée est comptée dans le journal.",
+            "Limite, mode de conduite et remise à zéro : l'écran n'affiche plus un réglage refusé.",
+            "Infos techniques : limite en km/h, verrou et phare en oui/non ; octet de fin des trames de 20 octets vérifié.",
+            "Ménage : champ inutilisé supprimé, dépendance retirée, README remis à jour.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.19",
         date = "27/11/2026 00:14",
         items = listOf(

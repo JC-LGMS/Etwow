@@ -71,6 +71,7 @@ object EtwowProtocol {
         if (bytes.size != 20) return false
         if ((bytes[0].toInt() and 0xFF) != 0xAA) return false
         if ((bytes[1].toInt() and 0xFF) != 0x55) return false
+        if ((bytes[19].toInt() and 0xFF) != 0x0D) return false
         var xor = 0
         for (index in 0 until 18) xor = xor xor (bytes[index].toInt() and 0xFF)
         return xor == (bytes[18].toInt() and 0xFF)
@@ -82,33 +83,26 @@ object EtwowProtocol {
     private fun decodeNew(frame: ByteArray): Telemetry? {
         fun u(index: Int) = frame[index].toInt() and 0xFF
         return when (u(4)) {
-            // 0x0B : vitesse, batterie, verrou, trip.
+            // 0x0B : vitesse, batterie, verrou, trip. Phare et zero start ne sont pas transmis.
             0x0B -> {
-                val status = u(17)
+                val locked = (u(17) and 0x01) != 0
                 Telemetry(
-                    type = 0x0B,
                     speedKmh = u(13).toDouble(),
                     batteryPercent = u(14).takeIf { it in 0..100 },
-                    status = syntheticStatus(
-                        locked = (status and 0x01) != 0,
-                        lightOn = null,
-                        zeroStart = null,
-                    ),
+                    status = if (locked) 0x20 else 0,
+                    statusMask = 0x20,
                     tripKm = ((u(15) shl 8) or u(16)) / 10.0,
                 )
             }
 
-            // 0x0C : odomètre, phare, zero start, mode de conduite.
+            // 0x0C : odomètre, phare, zero start, mode de conduite. Verrou non transmis.
             0x0C -> {
                 val flags = u(11)
                 val odo = (u(5) shl 24) or (u(6) shl 16) or (u(7) shl 8) or u(8)
                 Telemetry(
-                    type = 0x0C,
-                    status = syntheticStatus(
-                        locked = null,
-                        lightOn = (flags and 0x04) != 0,
-                        zeroStart = (flags and 0x80) != 0,
-                    ),
+                    status = (if ((flags and 0x04) != 0) 0x10 else 0) or
+                        (if ((flags and 0x80) != 0) 0x80 else 0),
+                    statusMask = 0x90,
                     driveMode = when {
                         u(10) and 0x08 != 0 -> 0
                         u(10) and 0x10 != 0 -> 1
@@ -124,20 +118,6 @@ object EtwowProtocol {
         }
     }
 
-    /** Les deux protocoles sont ramenés au même octet de statut : 0x80, 0x20, 0x10, mode. */
-    private fun syntheticStatus(
-        locked: Boolean?,
-        lightOn: Boolean?,
-        zeroStart: Boolean?,
-    ): Int? {
-        if (locked == null && lightOn == null && zeroStart == null) return null
-        var status = 0
-        if (locked == true) status = status or 0x20
-        if (lightOn == true) status = status or 0x10
-        if (zeroStart == true) status = status or 0x80
-        return status
-    }
-
     private fun decodeOld(notification: ByteArray): Telemetry? {
         // Trames de 4 octets, dernier octet = somme des précédents. Sans ce contrôle, une trame
         // abîmée peut annoncer 0 km/h et faire croire à l'arrêt (le verrou dépend de la vitesse).
@@ -148,14 +128,13 @@ object EtwowProtocol {
         // Octets 1 et 2 : valeur sur 16 bits, poids faible d'abord.
         val value = (notification[1].toInt() and 0xFF) or ((notification[2].toInt() and 0xFF) shl 8)
         return when (type) {
-            1 -> Telemetry(type, speedKmh = value / 10.0)
-            2 -> value.takeIf { it in 0..100 }?.let { Telemetry(type, batteryPercent = it) }
+            1 -> Telemetry(speedKmh = value / 10.0)
+            2 -> value.takeIf { it in 0..100 }?.let { Telemetry(batteryPercent = it) }
             3 -> Telemetry(
-                type,
                 status = notification[1].toInt() and 0xFF,
                 speedMode = (notification[1].toInt() and 0xFF) and 0x07,
             )
-            4 -> Telemetry(type, odoKm = value / 10.0)
+            4 -> Telemetry(odoKm = value / 10.0)
             else -> null
         }
     }
@@ -164,20 +143,24 @@ object EtwowProtocol {
 fun ByteArray.hex(): String = joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
 
 data class Telemetry(
-    val type: Int,
     val speedKmh: Double? = null,
     val batteryPercent: Int? = null,
     val status: Int? = null,
+    /** Bits réellement transmis : un bit absent reste inconnu (null), jamais « faux ». */
+    val statusMask: Int = 0xFF,
     val odoKm: Double? = null,
     val tripKm: Double? = null,
     val driveMode: Int? = null,
     /** Cran de limite de vitesse, seulement si la trame le porte (ancien protocole). */
     val speedMode: Int? = null,
 ) {
+    private fun bit(mask: Int): Boolean? =
+        status?.let { if ((statusMask and mask) == 0) null else (it and mask) != 0 }
+
     // Bits du statut, d'après le parseur officiel : 0x80 zero start, 0x20 verrou, 0x10 phare,
     // les trois bits de poids faible portent le cran de limite.
-    val lightOn: Boolean? get() = status?.let { (it and 0x10) != 0 }
-    val locked: Boolean? get() = status?.let { (it and 0x20) != 0 }
-    val zeroStart: Boolean? get() = status?.let { (it and 0x80) != 0 }
+    val lightOn: Boolean? get() = bit(0x10)
+    val locked: Boolean? get() = bit(0x20)
+    val zeroStart: Boolean? get() = bit(0x80)
     val mode: Int? get() = speedMode
 }

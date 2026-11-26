@@ -9,7 +9,8 @@ connus.
 ## Fonctionnalités
 
 - **Connexion automatique** en Bluetooth Low Energy dès que la trottinette s'allume, via un
-  service de premier plan (scan filtré par nom/service, reconnexion avec temporisation).
+  service de premier plan (recherche sans filtre, appareil reconnu par nom ou UUID de service,
+  reconnexion avec temporisation).
 - **Deux protocoles** : trames historiques `55 …` (E-TWOW / GTSport) et trames `AA 55 …` de
   20 octets des modèles récents (BR2262e-s / TK / ET-WOW), détectées automatiquement.
 - **Tableau de bord** : vitesse, batterie, distance depuis l'allumage (si le firmware l'envoie),
@@ -49,7 +50,7 @@ phare, verrouillage).
 Les chemins exacts des outils sur cette machine sont dans `AGENTS.md` (`gradle` n'est pas dans le
 `PATH`).
 
-## Structure prévue
+## Structure
 
 ```text
 Etwow/
@@ -58,7 +59,7 @@ Etwow/
 │  ├─ proguard-rules.pro
 │  └─ src/
 │     ├─ main/
-│     │  ├─ java/<package>/
+│     │  ├─ java/com/etwow/
 │     │  │  ├─ MainActivity.kt
 │     │  │  ├─ ble/             # transport BLE + simulateur
 │     │  │  ├─ protocol/        # trames Etwow (pur, testable)
@@ -78,13 +79,13 @@ Etwow/
 └─ etwow-release.keystore       # non versionné — à sauvegarder
 ```
 
-Le package / `applicationId` n'est pas encore fixé ; le consigner ici et dans `AGENTS.md` dès
-qu'il est choisi.
+Le package et l'`applicationId` sont `com.etwow`.
 
-## Dépendances prévues
+## Dépendances
 
 - Compose BOM, `androidx.compose.material3:material3`, `androidx.compose.ui:ui`,
-  `activity-compose`, `core-ktx`, `lifecycle-viewmodel-compose`, `kotlinx-coroutines-android`.
+  `androidx.compose.foundation:foundation`, `activity-compose`, `core-ktx`,
+  `kotlinx-coroutines-android`.
 - Le Bluetooth (`android.bluetooth`), la localisation (`LocationManager`), les réglages
   (`SharedPreferences`) et le widget (`RemoteViews`) viennent du framework : **aucune bibliothèque
   BLE, Glance, Room ou réseau** n'est nécessaire au démarrage.

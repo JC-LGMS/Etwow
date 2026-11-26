@@ -143,6 +143,9 @@ class EtwowProtocolTest {
         assertEquals(80, telemetry.batteryPercent)
         assertEquals(123.4, telemetry.tripKm!!, 0.0001)
         assertEquals(true, telemetry.locked)
+        // Phare et zero start ne sont pas dans cette trame : inconnus, jamais « faux ».
+        assertNull(telemetry.lightOn)
+        assertNull(telemetry.zeroStart)
     }
 
     @Test
@@ -156,10 +159,20 @@ class EtwowProtocolTest {
         val telemetry = EtwowProtocol.decode(frame)!!
         assertEquals(931.9, telemetry.odoKm!!, 0.0001)
         assertEquals(true, telemetry.lightOn)
-        assertEquals(false, telemetry.locked)
+        assertEquals(false, telemetry.zeroStart)
+        // Le verrou n'est pas dans cette trame : inconnu, jamais « faux ».
+        assertNull(telemetry.locked)
         // 0x20 = DRIVE ; ce protocole ne transmet pas la limite de vitesse.
         assertEquals(2, telemetry.driveMode)
         assertNull(telemetry.mode)
+    }
+
+    @Test
+    fun `nouvelle trame sans octet de fin ignoree`() {
+        val frame = newNotify(0x0B) { it[13] = 25 }
+        frame[19] = 0x0E
+        assertFalse(EtwowProtocol.isNewFrame(frame))
+        assertNull(EtwowProtocol.decode(frame))
     }
 
     @Test
