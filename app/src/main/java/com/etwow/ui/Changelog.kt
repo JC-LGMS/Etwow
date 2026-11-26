@@ -12,6 +12,21 @@ data class ChangelogEntry(
 
 val CHANGELOG = listOf(
     ChangelogEntry(
+        version = "0.19",
+        date = "27/11/2026 00:14",
+        items = listOf(
+            "Audit : correction des 20 points relevés.",
+            "Trip : sur le nouveau protocole, le compteur transmis par la trottinette n'est plus écrasé par le cumul d'odomètre.",
+            "BLE : plus de blocage sur « Connexion… » (GATT indisponible, descripteur absent ou refusé) ; recherche rapide 30 s puis économique ; un modèle qui n'annonce que son nom est trouvé.",
+            "Commandes : file d'écritures protégée entre threads, plus de trame perdue.",
+            "Sécurité : une trame abîmée dont la somme de contrôle est fausse est ignorée, elle ne peut plus faire croire à l'arrêt.",
+            "Hors ligne : les valeurs de la trottinette sont effacées au lieu de rester affichées comme actuelles.",
+            "Phare automatique : décision testée, position rafraîchie, le commutateur ne reconnecte plus malgré « Connexion automatique » désactivée.",
+            "Infos techniques : nom affiché, trames horodatées, les trames émises ne passent plus pour des trames reçues.",
+            "Ménage : deux champs et un calcul inutilisés supprimés, trois dépendances en moins.",
+        ),
+    ),
+    ChangelogEntry(
         version = "0.18",
         date = "26/11/2026 23:49",
         items = listOf(

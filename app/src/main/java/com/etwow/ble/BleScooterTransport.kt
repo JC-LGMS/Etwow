@@ -10,7 +10,6 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
@@ -19,7 +18,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import com.etwow.data.Connection
 import com.etwow.protocol.EtwowProtocol
@@ -50,6 +48,8 @@ class BleScooterTransport(
         const val NAME_GTSPORT = "GTSport"
         const val OP_TIMEOUT_MS = 4_000L
         const val RETRY_MAX_MS = 30_000L
+        /** Scan rapide au démarrage, puis économique : une trottinette éteinte ne doit pas vider la batterie. */
+        const val SCAN_FAST_MS = 30_000L
 
         val SERVICE_ETWOW: UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
         val SERVICE_GTSPORT: UUID = UUID.fromString("0000ff00-0000-1000-8000-00805f9b34fb")
@@ -64,13 +64,17 @@ class BleScooterTransport(
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val queue = ArrayDeque<(BluetoothGatt) -> Unit>()
+    private val lock = Any()
 
     private var gatt: BluetoothGatt? = null
+    @Volatile
     private var writeChar: BluetoothGattCharacteristic? = null
     private var opBusy = false
     private var opGeneration = 0
+    @Volatile
     private var scanning = false
     private var retryJob: Job? = null
+    private var scanModeJob: Job? = null
     private var retryDelay = 1_000L
 
     private val adapter: BluetoothAdapter? by lazy {
@@ -179,17 +183,25 @@ class BleScooterTransport(
         }
         if (scanning) return
 
-        val filters = listOf(SERVICE_ETWOW, SERVICE_GTSPORT).map {
-            ScanFilter.Builder().setServiceUuid(ParcelUuid(it)).build()
-        }
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
-
         listener.onConnection(Connection.Connecting, null, null)
         scanning = true
+        // Sans filtre de service : un modèle récent peut n'annoncer que son nom. On trie dans le
+        // callback. Rapide 30 s, puis économique.
+        startScan(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        scanModeJob?.cancel()
+        scanModeJob = scope.launch {
+            delay(SCAN_FAST_MS)
+            if (!scanning) return@launch
+            stopScan()
+            scanning = true
+            startScan(ScanSettings.SCAN_MODE_LOW_POWER)
+        }
+    }
+
+    private fun startScan(mode: Int) {
         try {
-            adapter.bluetoothLeScanner?.startScan(filters, settings, scanCallback)
+            adapter?.bluetoothLeScanner
+                ?.startScan(null, ScanSettings.Builder().setScanMode(mode).build(), scanCallback)
                 ?: run {
                     scanning = false
                     listener.onConnection(Connection.Offline, null, null)
@@ -214,12 +226,13 @@ class BleScooterTransport(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device ?: return
-            val name = try {
-                device.name
-            } catch (_: SecurityException) {
-                null
-            }
-            if (name != null && !isScooterName(name)) return
+            val name = result.scanRecord?.deviceName
+                ?: try {
+                    device.name
+                } catch (_: SecurityException) {
+                    null
+                }
+            if (!isScooter(result, name)) return
             stopScan()
             listener.onLog("BLE : trouvé ${name ?: device.address}")
             connect(device)
@@ -233,17 +246,32 @@ class BleScooterTransport(
         }
     }
 
+    /** Nom annoncé ou UUID de service : un modèle récent peut n'annoncer que son nom. */
+    private fun isScooter(result: ScanResult, name: String?): Boolean {
+        if (name != null && isScooterName(name)) return true
+        val uuids = result.scanRecord?.serviceUuids ?: return false
+        return uuids.any { it.uuid == SERVICE_ETWOW || it.uuid == SERVICE_GTSPORT }
+    }
+
     private fun connect(device: BluetoothDevice) {
         closeGatt()
-        writeChar = null
-        queue.clear()
-        opBusy = false
+        synchronized(lock) {
+            writeChar = null
+            queue.clear()
+            opBusy = false
+        }
         try {
-            gatt = if (Build.VERSION.SDK_INT >= 26) {
+            val g = if (Build.VERSION.SDK_INT >= 26) {
                 device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             } else {
                 @Suppress("DEPRECATION")
                 device.connectGatt(context, false, callback)
+            }
+            gatt = g
+            if (g == null) {
+                // Sans GATT, aucun callback n'arrivera : sans ce garde-fou, « Connexion… » restait à vie.
+                listener.onLog("BLE : connexion impossible (GATT indisponible)")
+                scheduleRetry()
             }
         } catch (e: SecurityException) {
             listener.onLog("BLE : connexion refusée (${e.message})")
@@ -308,6 +336,9 @@ class BleScooterTransport(
                 listener.onConnection(Connection.Connected, name ?: "E-TWOW", g.device.address)
             } else {
                 listener.onLog("BLE : notifications refusées ($status)")
+                closeGatt()
+                listener.onConnection(Connection.Offline, null, null)
+                scheduleRetry()
             }
         }
 
@@ -364,6 +395,9 @@ class BleScooterTransport(
             val descriptor = char.getDescriptor(CCCD)
             if (descriptor == null) {
                 listener.onLog("BLE : descripteur CCCD absent")
+                closeGatt()
+                listener.onConnection(Connection.Offline, null, null)
+                scheduleRetry()
                 return
             }
             enqueue {
@@ -378,20 +412,26 @@ class BleScooterTransport(
             }
         } catch (e: SecurityException) {
             listener.onLog("BLE : notifications refusées (${e.message})")
+            closeGatt()
+            listener.onConnection(Connection.Offline, null, null)
+            scheduleRetry()
         }
     }
 
     private fun enqueue(op: (BluetoothGatt) -> Unit) {
-        queue.addLast(op)
+        synchronized(lock) { queue.addLast(op) }
         pump()
     }
 
     private fun pump() {
-        if (opBusy) return
-        val g = gatt ?: return
-        val op = queue.removeFirstOrNull() ?: return
-        opBusy = true
-        val generation = ++opGeneration
+        // Pioche sous verrou : write() vient du thread principal, les callbacks GATT d'un autre.
+        val (g, op, generation) = synchronized(lock) {
+            if (opBusy) return
+            val g = gatt ?: return
+            val op = queue.removeFirstOrNull() ?: return
+            opBusy = true
+            Triple(g, op, ++opGeneration)
+        }
         try {
             op(g)
         } catch (e: SecurityException) {
@@ -401,17 +441,26 @@ class BleScooterTransport(
         }
         scope.launch {
             delay(OP_TIMEOUT_MS)
-            if (generation == opGeneration) {
+            val abandoned = synchronized(lock) {
+                if (generation == opGeneration) {
+                    opBusy = false
+                    true
+                } else {
+                    false
+                }
+            }
+            if (abandoned) {
                 listener.onLog("BLE : délai dépassé, opération abandonnée")
-                opBusy = false
                 pump()
             }
         }
     }
 
     private fun finishOp() {
-        opGeneration++
-        opBusy = false
+        synchronized(lock) {
+            opGeneration++
+            opBusy = false
+        }
         pump()
     }
 
@@ -426,12 +475,12 @@ class BleScooterTransport(
     }
 
     private fun closeGatt() {
+        val g = synchronized(lock) { gatt.also { gatt = null } }
         try {
-            gatt?.disconnect()
-            gatt?.close()
+            g?.disconnect()
+            g?.close()
         } catch (_: SecurityException) {
         }
-        gatt = null
     }
 
     private fun hasScanPermission(): Boolean {

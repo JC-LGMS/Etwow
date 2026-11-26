@@ -42,7 +42,7 @@ class EtwowProtocolTest {
         // 0x2467 / 10 = 931,9 km : l'odomètre affiché par la trottinette (931).
         assertEquals(931.9, EtwowProtocol.decode(bytes(4, 0x67, 0x24, 0x8F))!!.odoKm!!, 0.0001)
 
-        // Type 5 (6 octets) absent du parseur officiel : ignoré.
+        // Type 5 (6 octets) absent du parseur officiel : ignoré (et sa somme ne suit pas la règle).
         assertNull(EtwowProtocol.decode(bytes(5, 0x31, 0x32, 0x33, 0x34, 0x9D)))
     }
 
@@ -56,25 +56,32 @@ class EtwowProtocolTest {
 
     @Test
     fun `batterie hors bornes ignoree`() {
-        assertNull(EtwowProtocol.decode(bytes(2, 200, 0)))
-        assertNull(EtwowProtocol.decode(bytes(2, 0xC8, 0x00)))
+        assertNull(EtwowProtocol.decode(bytes(2, 0xC8, 0x00, 0xCA)))
+        assertNull(EtwowProtocol.decode(bytes(2, 0x64, 0x00)))
+    }
+
+    @Test
+    fun `somme de controle fausse rejetee`() {
+        // Sans ce contrôle, une trame abîmée peut annoncer 0 km/h et faire croire à l'arrêt.
+        assertNull(EtwowProtocol.decode(bytes(1, 0x00, 0x00, 0x02)))
+        assertNull(EtwowProtocol.decode(bytes(3, 0x10, 0x00, 0x00)))
     }
 
     @Test
     fun `statut verrou phare et mode`() {
         // 0x73 = zero start non, verrou oui, phare oui, cran 3.
-        val telemetry = EtwowProtocol.decode(bytes(3, 0x73, 0x00))
+        val telemetry = EtwowProtocol.decode(bytes(3, 0x73, 0x00, 0x76))
         assertEquals(true, telemetry?.locked)
         assertEquals(true, telemetry?.lightOn)
         assertEquals(false, telemetry?.zeroStart)
         assertEquals(SpeedModes.L3_25, telemetry?.mode)
 
-        val lockedOnly = EtwowProtocol.decode(bytes(3, 0x22, 0x00))
+        val lockedOnly = EtwowProtocol.decode(bytes(3, 0x22, 0x00, 0x25))
         assertEquals(true, lockedOnly?.locked)
         assertEquals(false, lockedOnly?.lightOn)
         assertEquals(SpeedModes.L2_20, lockedOnly?.mode)
 
-        assertEquals(true, EtwowProtocol.decode(bytes(3, 0x80, 0x00))?.zeroStart)
+        assertEquals(true, EtwowProtocol.decode(bytes(3, 0x80, 0x00, 0x83))?.zeroStart)
     }
 
     @Test

@@ -3,7 +3,6 @@ package com.etwow.solar
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -67,11 +66,35 @@ class SolarTimesTest {
     }
 
     @Test
-    fun `prochaine transition`() {
-        val day = SolarTimes.forDate(LocalDate.of(2026, 6, 21), 48.8566, 2.3522, paris)
-        val noon = ZonedDateTime.of(2026, 6, 21, 12, 0, 0, 0, paris)
-        val next = AutoLight.nextTransition(noon, day)!!
-        assertEquals(21, next.hour)
-        assertEquals(27, next.minute)
+    fun `override manuel du phare tenu jusqu a la transition`() {
+        // Nuit, souhaité allumé, utilisateur éteint à la main : override = allumé.
+        assertFalse(
+            AutoLight.shouldCommand(desired = true, current = true, manualOverride = true, overrideDesired = true),
+        )
+        // Toujours la même nuit, le phare est éteint : on ne le rallume pas.
+        assertFalse(
+            AutoLight.shouldCommand(desired = true, current = false, manualOverride = true, overrideDesired = true),
+        )
+        // Transition vers le jour : l'override tombe, l'état est déjà bon.
+        assertFalse(
+            AutoLight.shouldCommand(desired = false, current = false, manualOverride = true, overrideDesired = true),
+        )
+        // Transition vers la nuit, phare éteint : on l'allume.
+        assertTrue(
+            AutoLight.shouldCommand(desired = true, current = false, manualOverride = false, overrideDesired = false),
+        )
+    }
+
+    @Test
+    fun `pas de commande sans etat courant ni changement`() {
+        assertFalse(
+            AutoLight.shouldCommand(desired = true, current = null, manualOverride = false, overrideDesired = false),
+        )
+        assertFalse(
+            AutoLight.shouldCommand(desired = true, current = true, manualOverride = false, overrideDesired = false),
+        )
+        assertTrue(
+            AutoLight.shouldCommand(desired = false, current = true, manualOverride = false, overrideDesired = false),
+        )
     }
 }

@@ -50,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,7 +80,7 @@ private val DRIVE_MODES = listOf("WALK", "ECO", "DRIVE", "SPORT")
 
 @Composable
 fun MainScreen() {
-    var page by remember { mutableStateOf(Page.Main) }
+    var page by rememberSaveable { mutableStateOf(Page.Main) }
     var showChangelog by remember { mutableStateOf(false) }
 
     // Le retour système ramène à la page principale au lieu de quitter.
@@ -206,7 +207,7 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     modifier = Modifier.weight(1f),
                 ) { Text("Klaxon") }
             }
-            if (connected && state.speedKmh != 0.0) {
+            if (connected && state.speedKmh?.let { it > 0.0 } == true) {
                 Text(
                     "Verrouillage impossible en roulant.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -274,8 +275,9 @@ private fun MainPage(onSettings: () -> Unit, onInfo: () -> Unit, onVersion: () -
                     checked = autoLight,
                     onCheckedChange = {
                         autoLight = it
+                        // Le service lit le réglage à chaque trame : pas besoin de le démarrer ici
+                        // (sinon le commutateur reconnectait malgré « Connexion automatique » off).
                         settings.autoLight = it
-                        ScooterService.send(context, ScooterService.ACTION_START)
                     },
                 )
             }
@@ -372,6 +374,7 @@ private fun InfoPage(onBack: () -> Unit) {
     Screen {
         SubHeader("Informations techniques", onBack)
         CardBox {
+            InfoLine("Nom", state.deviceName ?: "—")
             InfoLine("Statut", state.statusByte?.let { "0x%02X".format(it) } ?: "—")
             InfoLine("Mode", state.mode?.toString() ?: "—")
             InfoLine("Verrou", state.locked?.toString() ?: "—")

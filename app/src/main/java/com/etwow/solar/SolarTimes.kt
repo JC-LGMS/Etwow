@@ -81,15 +81,14 @@ object AutoLight {
         return !now.isBefore(onFrom) || now.isBefore(onUntil)
     }
 
-    fun nextTransition(
-        now: ZonedDateTime,
-        day: SolarTimes.SolarDay,
-        marginMinutes: Long = MARGIN_MINUTES,
-    ): ZonedDateTime? {
-        val candidates = listOfNotNull(
-            day.sunrise?.plusMinutes(marginMinutes),
-            day.sunset?.minusMinutes(marginMinutes),
-        )
-        return candidates.filter { it.isAfter(now) }.minOrNull()
-    }
+    /**
+     * Faut-il envoyer la commande ? L'override manuel tient tant que le souhait calculé ne change
+     * pas (transition) ; un état courant inconnu ne déclenche rien.
+     */
+    fun shouldCommand(
+        desired: Boolean,
+        current: Boolean?,
+        manualOverride: Boolean,
+        overrideDesired: Boolean,
+    ): Boolean = !(manualOverride && desired == overrideDesired) && current != null && current != desired
 }

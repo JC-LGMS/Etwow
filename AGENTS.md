@@ -162,6 +162,11 @@ pour mémoire et non utilisés ici : 5/6 clignotants, 8 unité, 9 mode (0=WALK,1
 Le premier octet est le type ; vérifier la longueur **avant** d'indexer : une trame tronquée ne doit
 jamais planter le service.
 
+Trames d'ancien protocole : **exactement 4 octets et somme de contrôle vérifiée** ; une trame dont
+la somme ne colle pas est ignorée. Sans ce contrôle, une trame abîmée peut annoncer 0 km/h et faire
+croire à l'arrêt alors que le verrou dépend de la vitesse. Le type 5 (6 octets) ne suit pas la règle
+de somme et reste ignoré.
+
 Règles reprises du **parseur de l'application officielle** décompilée, documenté dans
 `Laufbursche42/etwow-unlock` (`app.js`, en-tête et section « RX telemetry parser ») : trames de
 4 octets, `byte[0]` = type, **valeur int16 petit-boutiste sur les octets 1 et 2**, `byte[3]` =
@@ -227,7 +232,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
     zero start (`byte[11]` 0x80), mode de conduite one-hot dans `byte[10]` (0x08 WALK, 0x10 ECO,
     0x20 DRIVE, 0x04 SPORT), bits d'état batterie/moteur dans `byte[11]`.
 - Le nouveau protocole **transmet le trip** : dans ce cas l'application l'affiche tel quel, sans
-  cumul d'écarts (le cumul reste le repli pour l'ancien protocole).
+  cumul d'écarts (le cumul reste le repli pour l'ancien protocole). Piège : les trames `0C`
+  (odomètre seul) ne doivent **pas** déclencher le cumul, sinon elles écrasent le trip transmis une
+  fois par seconde et polluent `savedTrip`.
 - Implémentation : `EtwowProtocol.newFrame/lockNew/lightOnNew/setModeNew`, `isNewFrame` (signature +
   XOR), `decodeNew` (les deux trames sont ramenées à l'octet de statut commun 0x80/0x20/0x10/mode).
   `ScooterService` bascule sur le nouveau format dès que le nom de l'appareil ou la première trame
@@ -285,13 +292,21 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 
 - Démarrer le service quand l'application s'ouvre si l'auto-connexion est activée ; un
   `BOOT_COMPLETED` peut le relancer après un redémarrage du téléphone (à vérifier selon l'API 37).
-- Scan `BluetoothLeScanner` filtré par nom (`E-TWOW`, `GTSport`) ou UUID de service, avec repli si
-  le nom est nul. Au premier résultat, `connectGatt(..., autoConnect = false)` pour aller vite.
+- Scan `BluetoothLeScanner` **sans filtre de service** : un résultat est accepté si le nom annoncé
+  porte un préfixe connu (`E-TWOW`, `GTSport`, `BR2262e-s`, `TK`, `ET-WOW`) **ou** s'il annonce le
+  service `FFE0`/`FF00`. Un modèle récent peut n'annoncer que son nom : un filtre de service le
+  rendait invisible. Rapide (`SCAN_MODE_LOW_LATENCY`) 30 s puis `SCAN_MODE_LOW_POWER`, sinon une
+  trottinette éteinte vide la batterie. Au premier résultat,
+  `connectGatt(..., autoConnect = false)` pour aller vite.
 - Après déconnexion : `autoConnect = true` sur la dernière adresse **si elle est stable**, sinon
   nouveau scan avec temporisation (1 s, 2 s, 5 s, 10 s, 30 s max). Le statut GATT 133 est courant :
   fermer le GATT et réessayer.
-- Une seule instance GATT, une seule opération à la fois (file + mutex + timeout). Android refuse
-  une écriture pendant une lecture ou une écriture de descripteur.
+- Une seule instance GATT, une seule opération à la fois (file + verrou + timeout). Android refuse
+  une écriture pendant une lecture ou une écriture de descripteur. Le verrou est obligatoire :
+  `write()` vient du thread principal et les callbacks GATT d'un autre, un `ArrayDeque` nu perdait
+  des commandes (voire se corrompait).
+- Trois impasses à ne pas rouvrir : `connectGatt` qui rend `null`, CCCD absent, écriture de
+  descripteur refusée. Sans `Offline` + `scheduleRetry()`, l'écran restait sur « Connexion… » à vie.
 - `onConnectionStateChange` → `close()` systématique avant de recréer ; sinon les ressources
   fuient.
 - Le service tourne tant que l'auto-connexion est active. L'utilisateur doit mettre l'application
@@ -373,10 +388,16 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
   chaque notification.
 - Le résumé affiche le lever avant le coucher : « lever 08:09 · coucher 17:04 ».
 - Une action manuelle sur le phare suspend l'automatisme **jusqu'à la prochaine transition** ; le
-  réglage reste activé. Ne pas se battre avec l'utilisateur.
-- Cas polaires (aucun lever/coucher) : ne pas planter, désactiver l'automatisme pour la journée.
+  réglage reste activé. Ne pas se battre avec l'utilisateur. La décision « envoyer ou non » est
+  `AutoLight.shouldCommand` (pure, testée) : override tenu, transition, état courant inconnu.
+  Le commutateur de l'UI n'écrit que le réglage — il ne démarre plus le service, sinon il
+  reconnectait malgré « Connexion automatique » désactivée.
+- Cas polaires (aucun lever/coucher) : ne pas planter ; nuit polaire = allumé, jour polaire =
+  éteint, et le résumé le dit.
 - Recalculer au changement de position/fuseau et à la transition ; une coroutine planifiée pendant
   que le service est connecté suffit, pas de WorkManager.
+- Position rafraîchie au plus une fois par minute depuis `getLastKnownLocation`, sinon mémorisée :
+  sans ça, un déménagement laissait le coucher du soleil de l'ancienne ville pour toujours.
 - Rythme réel : `applyAutoLight()` est rappelé à chaque trame de statut (donc à la connexion et à
   chaque changement) **et** par un tick de 60 s. Sans le rappel sur statut, la première application
   attendait une minute après la connexion — visible à l'écran comme un phare qui ne s'allume pas.
@@ -385,10 +406,12 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 
 ### Informations techniques
 
-- Afficher : nom, adresse, RSSI, services/caractéristiques, MTU, dernière notification, état décodé
-  (mode, verrou, phare, batterie, vitesse, trip, odo, octet de statut).
-- Journal de trames brutes horodatées, **borné** (200 entrées), avec bouton copier. C'est l'outil de
-  débogage pour un nouveau firmware.
+- Afficher : nom, adresse, état décodé (mode, verrou, phare, batterie, vitesse, trip, odo, octet de
+  statut) et les dernières trames. RSSI, MTU et liste des services ne sont pas exposés par le
+  transport : ne pas les promettre sans les remonter.
+- Journal de trames brutes **horodatées** (`HH:mm:ss`), borné (200 entrées), avec bouton copier.
+  C'est l'outil de débogage pour un nouveau firmware. `lastFrame` ne regarde que les lignes
+  entrantes (`←`), sinon une commande contenant l'octet cherché passe pour une trame.
 - Ne pas inventer tension, courant ou température : afficher « non exposé par le protocole connu »
   tant qu'aucune trame ne les a identifiés.
 
@@ -463,9 +486,9 @@ L'application officielle choisit le format d'après le **nom** de l'appareil
 - La logique pure (codec, checksum, décodage des trames, calcul solaire, machine à états du widget
   et du phare auto) a un **test unitaire JUnit 4** dans `app/src/test/`, lancé par
   `:app:testDebugUnitTest`.
-- Tests minimum : trames de commande exactes, notification tronquée/type inconnu sans crash, statut
-  verrou/phare/mode, bascule 25 ↔ mode précédent, lever/coucher connus (Paris, solstices) et cas
-  polaire, hystérésis du phare, override manuel.
+- Tests minimum : trames de commande exactes, notification tronquée/type inconnu/somme fausse sans
+  crash, statut verrou/phare/mode, bascule 25 ↔ mode précédent, lever/coucher connus (Paris,
+  solstices) et cas polaire, hystérésis du phare, override manuel (`AutoLight.shouldCommand`).
 - Trip/odomètre : un test avec une trame réelle dès que l'ordre des octets est confirmé.
 - Le reste se vérifie **à l'écran** (pas d'`androidTest` par défaut).
 

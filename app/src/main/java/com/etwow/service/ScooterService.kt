@@ -13,6 +13,7 @@ import android.content.pm.ServiceInfo
 import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -97,6 +98,12 @@ class ScooterService : Service(), ScooterTransport.Listener {
     // officielle. lastOdoKm repart à zéro à chaque connexion pour ne pas compter le trajet hors ligne.
     private var lastOdoKm: Double? = null
 
+    // Trip en mémoire : écrit en préférences à la déconnexion, pas à chaque trame d'odomètre.
+    private var savedTripKm = 0.0
+
+    // Position : rafraîchie au plus une fois par minute, sinon mémorisée.
+    private var positionAt = 0L
+
     // Nouveau protocole (trames de 20 octets) : décidé par le nom de l'appareil, ou dès la
     // première trame reçue qui en porte la signature.
     private var newProtocol = false
@@ -109,6 +116,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
     override fun onCreate() {
         super.onCreate()
         settings = Settings(this)
+        savedTripKm = settings.savedTripKm
         createChannel()
         if (!startForegroundNotification()) {
             // Sans BLUETOOTH_CONNECT/SCAN accordé, un FGS connectedDevice tue le processus :
@@ -118,7 +126,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
             return
         }
         ScooterBus.update {
-            it.copy(simulator = settings.simulator, autoLight = settings.autoLight)
+            it.copy(simulator = settings.simulator)
         }
         scope.launch {
             while (isActive) {
@@ -172,6 +180,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onDestroy() {
+        persistTrip()
         stopTransport()
         scope.cancel()
         super.onDestroy()
@@ -187,7 +196,6 @@ class ScooterService : Service(), ScooterTransport.Listener {
         ScooterBus.update {
             it.copy(
                 simulator = simulated,
-                autoLight = settings.autoLight,
                 connection = Connection.Connecting,
             )
         }
@@ -229,7 +237,15 @@ class ScooterService : Service(), ScooterTransport.Listener {
     }
 
     override fun onConnection(state: Connection, name: String?, address: String?) {
-        if (state != Connection.Connected) lastOdoKm = null
+        if (state != Connection.Connected) {
+            // Valeurs de la trottinette précédente : les effacer, sinon l'UI les présente comme
+            // actuelles alors que la liaison est perdue. Le trip persisté reste.
+            lastOdoKm = null
+            persistTrip()
+            pending = null
+            pendingJob?.cancel()
+            clearTelemetry()
+        }
         if (state == Connection.Connected && name != null) {
             setNewProtocol(EtwowProtocol.NEW_PROTOCOL_NAMES.any { name.startsWith(it) })
         }
@@ -238,7 +254,6 @@ class ScooterService : Service(), ScooterTransport.Listener {
                 connection = state,
                 deviceName = name ?: it.deviceName,
                 deviceAddress = address ?: it.deviceAddress,
-                speedKmh = if (state == Connection.Connected) it.speedKmh else null,
             )
         }
         render()
@@ -261,13 +276,15 @@ class ScooterService : Service(), ScooterTransport.Listener {
         // Journal brut : c'est la seule façon de corriger un décodage faux sur la vraie machine.
         ScooterBus.log("← ${bytes.hex()}")
         if (EtwowProtocol.isNewFrame(bytes)) setNewProtocol(true)
+        // Le nouveau protocole transmet le trip : ne pas le remplacer par un cumul d'odomètre.
         val odo = telemetry.odoKm
+        val trip = telemetry.tripKm ?: if (odo != null && !newProtocol) updateTrip(odo) else null
         ScooterBus.update { snap ->
             snap.copy(
                 speedKmh = telemetry.speedKmh ?: snap.speedKmh,
                 batteryPercent = telemetry.batteryPercent ?: snap.batteryPercent,
                 odoKm = telemetry.odoKm ?: snap.odoKm,
-                tripKm = telemetry.tripKm ?: if (odo != null) updateTrip(odo) else snap.tripKm,
+                tripKm = trip ?: snap.tripKm,
                 statusByte = telemetry.status ?: snap.statusByte,
                 locked = telemetry.locked ?: snap.locked,
                 lightOn = telemetry.lightOn ?: snap.lightOn,
@@ -292,15 +309,17 @@ class ScooterService : Service(), ScooterTransport.Listener {
     private fun updateTrip(odo: Double): Double {
         val previous = lastOdoKm
         lastOdoKm = odo
-        val trip = TripMeter.next(settings.savedTripKm, previous, odo)
-        if (trip != settings.savedTripKm) settings.savedTripKm = trip
-        return trip
+        savedTripKm = TripMeter.next(savedTripKm, previous, odo)
+        return savedTripKm
+    }
+
+    /** Écrit le trip en préférences : à la déconnexion, pas à chaque trame. */
+    private fun persistTrip() {
+        if (settings.savedTripKm != savedTripKm) settings.savedTripKm = savedTripKm
     }
 
     private fun setNewProtocol(value: Boolean) {
-        if (newProtocol == value) return
         newProtocol = value
-        ScooterBus.update { it.copy(newProtocol = value) }
     }
 
     // --- commandes -----------------------------------------------------------------------
@@ -379,6 +398,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
             "remise à zéro du trip",
         )
         settings.savedTripKm = 0.0
+        savedTripKm = 0.0
         ScooterBus.update { it.copy(tripKm = 0.0) }
     }
 
@@ -452,7 +472,7 @@ class ScooterService : Service(), ScooterTransport.Listener {
             day.polarNight -> "nuit polaire · phare allumé"
             else -> "lever ${day.sunrise?.format(format) ?: "—"} · coucher ${day.sunset?.format(format) ?: "—"}"
         }
-        ScooterBus.update { it.copy(autoLight = settings.autoLight, solarSummary = summary) }
+        ScooterBus.update { it.copy(solarSummary = summary) }
 
         if (!settings.autoLight) {
             lightOverride = false
@@ -460,19 +480,31 @@ class ScooterService : Service(), ScooterTransport.Listener {
         }
         val desired = AutoLight.shouldBeOn(now, day)
         val snap = ScooterBus.state.value
-        if (lightOverride) {
-            if (desired == lightOverrideDesired) return
-            lightOverride = false
-        }
-        if (snap.connection != Connection.Connected || snap.lightOn == null) return
-        if (snap.lightOn == desired) return
+        val send = AutoLight.shouldCommand(desired, snap.lightOn, lightOverride, lightOverrideDesired)
+        if (lightOverride && desired != lightOverrideDesired) lightOverride = false
+        if (snap.connection != Connection.Connected || !send) return
         command(lightFrame(desired), "phare auto") {
             it.lightOn == desired
         }
     }
 
+    /** Position : dernier point connu du téléphone (au plus une fois par minute), sinon mémorisée. */
     private fun position(): Pair<Double, Double>? {
+        val now = SystemClock.elapsedRealtime()
+        if (now - positionAt >= 60_000) {
+            positionAt = now
+            lastKnownPosition()?.let { (lat, lon) ->
+                if (settings.latitude != lat || settings.longitude != lon) {
+                    settings.latitude = lat
+                    settings.longitude = lon
+                }
+            }
+        }
         settings.latitude?.let { lat -> settings.longitude?.let { lon -> return lat to lon } }
+        return null
+    }
+
+    private fun lastKnownPosition(): Pair<Double, Double>? {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) !=
             PackageManager.PERMISSION_GRANTED
         ) return null
@@ -481,8 +513,6 @@ class ScooterService : Service(), ScooterTransport.Listener {
             .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
             .maxByOrNull { it.time }
             ?: return null
-        settings.latitude = location.latitude
-        settings.longitude = location.longitude
         return location.latitude to location.longitude
     }
 

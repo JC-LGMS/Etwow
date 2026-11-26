@@ -139,7 +139,11 @@ object EtwowProtocol {
     }
 
     private fun decodeOld(notification: ByteArray): Telemetry? {
-        if (notification.size < 3) return null
+        // Trames de 4 octets, dernier octet = somme des précédents. Sans ce contrôle, une trame
+        // abîmée peut annoncer 0 km/h et faire croire à l'arrêt (le verrou dépend de la vitesse).
+        if (notification.size != 4) return null
+        val sum = (0 until 3).sumOf { notification[it].toInt() and 0xFF } and 0xFF
+        if (sum != (notification[3].toInt() and 0xFF)) return null
         val type = notification[0].toInt() and 0xFF
         // Octets 1 et 2 : valeur sur 16 bits, poids faible d'abord.
         val value = (notification[1].toInt() and 0xFF) or ((notification[2].toInt() and 0xFF) shl 8)
